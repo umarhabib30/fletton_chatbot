@@ -185,7 +185,7 @@ class WhatsappService
 
         $userText = $request->input('Body');
 
-        broadcast(new MessageSent($userText));
+
 
         // 1) Get the OpenAI response
         $aiResponse = Http::withHeaders([
@@ -213,12 +213,9 @@ class WhatsappService
             }
         }
 
+        event(new MessageSent($userText, $conversationSid));
         $this->sendCustomMessage( $conversationSid,  trim($reply)  );
 
         return response()->noContent();
-        // $this->twilio->messages->create($userNumber, [
-        //     'from' => $this->whatsappFrom,
-        //     'body' => trim($reply),
-        // ]);
     }
 }

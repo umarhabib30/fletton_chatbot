@@ -9,28 +9,28 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
 
-    <script src="https://cdn.jsdelivr.net/npm/pusher-js@7.0.3/dist/web/pusher.min.js"></script>
-<script src="{{ mix('js/app.js') }}"></script>
+    <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
+    <script>
+        // Enable pusher logging - don't include this in production
+        Pusher.logToConsole = true;
 
+        var pusher = new Pusher('1643ce51c4a3d4c535e9', {
+            cluster: 'ap2'
+        });
+
+        // Subscribe to the 'chat' channel
+        var channel = pusher.subscribe('chat');
+
+        // Bind to the 'my-event' event that is broadcasted from Laravel
+        channel.bind('my-event', function(data) {
+            console.log('Received data:', data);
+            console.log('sid:', data.sid); // Log the sid
+
+        });
+    </script>
 </head>
 
 <body class="bg-gray-900 text-white h-screen overflow-hidden">
-
-
-<script>
-    // Make sure Echo and Pusher are available
-    window.Echo.channel('chat')
-        .listen('MessageSent', (event) => {
-            console.log(event.message); // You can log the message
-            alert(event.message); // Show an alert with the message
-            // Add the new message to the chat container
-            // let messageContainer = document.getElementById('messages');
-            // messageContainer.innerHTML += `<p>${event.message}</p>`;
-        });
-</script>
-
-
-
     <div class="flex h-screen">
         <!-- Sidebar -->
         <div class="w-80 bg-gray-800 border-r border-gray-700 flex flex-col">
@@ -261,11 +261,11 @@
                         `;
                                 }
                                 $('#messagesArea').append(
-                                messageHtml); // Append message to chat area
+                                    messageHtml); // Append message to chat area
                             });
                         } else {
                             $('#messagesArea').append(
-                            '<p>No messages found.</p>'); // If no messages exist
+                                '<p>No messages found.</p>'); // If no messages exist
                         }
                     },
                     error: function() {

@@ -1,13 +1,37 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat Application</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-   <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
+
+    <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
+    <script>
+        // Enable pusher logging - don't include this in production
+        Pusher.logToConsole = true;
+
+        var pusher = new Pusher('1643ce51c4a3d4c535e9', {
+            cluster: 'ap2'
+        });
+
+        // Subscribe to the 'chat' channel
+        var channel = pusher.subscribe('chat');
+
+        // Bind to the 'my-event' event that is broadcasted from Laravel
+        channel.bind('my-event', function(data) {
+            console.log('Received data:', data);
+             console.log('sid:', data.sid); // Log the sid
+           
+        });
+    </script>
+
+
 </head>
+
 <body class="bg-gray-900 text-white h-screen overflow-hidden">
     <div class="flex h-screen">
         <!-- Sidebar -->
@@ -17,14 +41,17 @@
                 <div class="flex items-center space-x-3">
                     <div class="relative">
                         <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=40&h=40&fit=crop&crop=face"
-                             alt="Mike Ross" class="w-10 h-10 rounded-full">
-                        <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-800"></div>
+                            alt="Mike Ross" class="w-10 h-10 rounded-full">
+                        <div
+                            class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-gray-800">
+                        </div>
                     </div>
                     <div class="flex-1">
                         <h3 class="font-semibold text-white">Mike Ross</h3>
                         <div class="flex items-center text-gray-400 text-sm">
                             <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"/>
+                                <path
+                                    d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" />
                             </svg>
                             <span>▼</span>
                         </div>
@@ -35,21 +62,24 @@
             <!-- Search Bar -->
             <div class="p-4">
                 <div class="relative">
-                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" fill="none"
+                        stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                     <input type="text" id="searchInput" placeholder="Search contacts..."
-                           class="w-full bg-gray-700 text-white pl-10 pr-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        class="w-full bg-gray-700 text-white pl-10 pr-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
             </div>
 
             <!-- Contacts List -->
             <div class="flex-1 overflow-y-auto scrollbar-hide" id="contactsList">
                 <!-- Contact Items -->
-                <div class="contact-item p-4 cursor-pointer active" data-name="Harvey Specter" data-preview="How the hell am I supposed to get a jury to believe you when I am not even sure that I do?!">
+                <div class="contact-item p-4 cursor-pointer active" data-name="Harvey Specter"
+                    data-preview="How the hell am I supposed to get a jury to believe you when I am not even sure that I do?!">
                     <div class="flex items-center space-x-3">
                         <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop&crop=face"
-                             alt="Harvey Specter" class="w-10 h-10 rounded-full">
+                            alt="Harvey Specter" class="w-10 h-10 rounded-full">
                         <div class="flex-1 min-w-0">
                             <div class="flex justify-between items-center">
                                 <h4 class="font-semibold text-white truncate">Harvey Specter</h4>
@@ -88,7 +118,7 @@
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-3">
                         <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop&crop=face"
-                             alt="Harvey Specter" class="w-10 h-10 rounded-full">
+                            alt="Harvey Specter" class="w-10 h-10 rounded-full">
                         <div>
                             <h3 class="font-semibold text-white" id="chatHeaderName">Harvey Specter</h3>
                             <p class="text-sm text-green-400">Online</p>
@@ -97,17 +127,20 @@
                     <div class="flex items-center space-x-4">
                         <button class="text-gray-400 hover:text-white">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                             </svg>
                         </button>
                         <button class="text-gray-400 hover:text-white">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                             </svg>
                         </button>
                         <button class="text-gray-400 hover:text-white">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         </button>
                     </div>
@@ -119,10 +152,11 @@
                 <!-- Harvey's Message -->
                 <div class="flex space-x-3">
                     <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=32&h=32&fit=crop&crop=face"
-                         alt="Harvey" class="w-8 h-8 rounded-full">
+                        alt="Harvey" class="w-8 h-8 rounded-full">
                     <div class="flex-1">
                         <div class="bg-gray-700 rounded-lg p-3 max-w-md">
-                            <p class="text-white">How the hell am I supposed to get a jury to believe you when I am not even sure that I do?!</p>
+                            <p class="text-white">How the hell am I supposed to get a jury to believe you when I am not
+                                even sure that I do?!</p>
                         </div>
                         <p class="text-xs text-gray-400 mt-1">2:30 PM</p>
                     </div>
@@ -137,33 +171,37 @@
                         <p class="text-xs text-gray-400 mt-1">2:31 PM</p>
                     </div>
                     <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face"
-                         alt="Mike" class="w-8 h-8 rounded-full">
+                        alt="Mike" class="w-8 h-8 rounded-full">
                 </div>
 
             </div>
 
-           
+
 
             <!-- Message Input -->
             <div class="bg-gray-800 border-t border-gray-700 p-4">
                 <div class="flex items-center space-x-3">
                     <button class="text-gray-400 hover:text-white">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                         </svg>
                     </button>
                     <div class="flex-1 relative">
                         <input type="text" placeholder="Write your message..."
-                               class="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10">
-                        <button class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white">
+                            class="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10">
+                        <button
+                            class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.01M15 10h1.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.01M15 10h1.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                         </button>
                     </div>
                     <button class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                         </svg>
                     </button>
                 </div>
@@ -334,14 +372,17 @@
             }
 
             // Example: Show typing indicator when Harvey is selected and user sends a message
-            $('.bg-gray-800:last-child input, .bg-gray-800:last-child button:last-child').on('click keypress', function(e) {
-                if ((e.type === 'click' || e.which === 13) && $('#chatHeaderName').text() === 'Harvey Specter') {
-                    setTimeout(function() {
-                        showTypingIndicator('Harvey Specter');
-                    }, 1000);
-                }
-            });
+            $('.bg-gray-800:last-child input, .bg-gray-800:last-child button:last-child').on('click keypress',
+                function(e) {
+                    if ((e.type === 'click' || e.which === 13) && $('#chatHeaderName').text() ===
+                        'Harvey Specter') {
+                        setTimeout(function() {
+                            showTypingIndicator('Harvey Specter');
+                        }, 1000);
+                    }
+                });
         });
     </script>
 </body>
+
 </html>

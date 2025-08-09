@@ -24,3 +24,4 @@ Route::get('chats', [ChatController::class, 'index']);
 Route::get('chat/messages/{conversationSid}', [ChatController::class, 'getMessages']);
 Route::post('send-message', [ChatController::class, 'sendCustomMessage']);
 
+

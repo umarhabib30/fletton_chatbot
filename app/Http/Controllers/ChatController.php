@@ -47,5 +47,18 @@ class ChatController extends Controller
         return response()->noContent();
     }
 
-   
+    public function broadCastMessage(Request $request)
+    {
+        try {
+            // Get the message from the request
+            $message = $request->input('message');
+            $sid = $request->input('sid');
+            // Broadcast the message using the MessageSent event
+            event(new MessageSent($message, $sid));
+
+            return response()->json(['status' => 'Message broadcasted successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
 }
