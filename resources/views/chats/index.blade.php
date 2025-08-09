@@ -10,24 +10,7 @@
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
 
     <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
-    <script>
-        // Enable pusher logging - don't include this in production
-        Pusher.logToConsole = true;
 
-        var pusher = new Pusher('1643ce51c4a3d4c535e9', {
-            cluster: 'ap2'
-        });
-
-        // Subscribe to the 'chat' channel
-        var channel = pusher.subscribe('chat');
-
-        // Bind to the 'my-event' event that is broadcasted from Laravel
-        channel.bind('my-event', function(data) {
-            console.log('Received data:', data);
-            console.log('sid:', data.sid); // Log the sid
-
-        });
-    </script>
 </head>
 
 <body class="bg-gray-900 text-white h-screen overflow-hidden">
@@ -72,20 +55,6 @@
 
             <!-- Contacts List -->
             <div class="flex-1 overflow-y-auto scrollbar-hide" id="contactsList">
-                <!-- Contact Items -->
-                {{-- <div class="contact-item p-4 cursor-pointer active" data-name="Harvey Specter" data-preview="How the hell am I supposed to get a jury to believe you when I am not even sure that I do?!">
-                    <div class="flex items-center space-x-3">
-                        <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop&crop=face"
-                             alt="Harvey Specter" class="w-10 h-10 rounded-full">
-                        <div class="flex-1 min-w-0">
-                            <div class="flex justify-between items-center">
-                                <h4 class="font-semibold text-white truncate">Harvey Specter</h4>
-                                <span class="text-xs text-gray-400">2:30 PM</span>
-                            </div>
-                            <p class="text-sm text-gray-400 truncate">Wrong. You take the gun, or you pull...</p>
-                        </div>
-                    </div>
-                </div> --}}
 
                 @foreach ($conversations as $conversation)
                     <div class="contact-item p-4 cursor-pointer " sid="{{ $conversation['sid'] }}"
@@ -180,6 +149,45 @@
             </div>
         </div>
     </div>
+
+     <script>
+        // Enable pusher logging - don't include this in production
+        Pusher.logToConsole = true;
+
+        var pusher = new Pusher('1643ce51c4a3d4c535e9', {
+            cluster: 'ap2'
+        });
+
+        // Subscribe to the 'chat' channel
+        var channel = pusher.subscribe('chat');
+
+        // Bind to the 'my-event' event that is broadcasted from Laravel
+        channel.bind('my-event', function(data) {
+            console.log('Received data:', data);
+            console.log('sid:', data.sid); // Log the sid
+
+                $('#chat-sid').val(sid);
+                $('#chatHeaderName').text(contactName);
+                $('.flex-1 .bg-gray-800 img').attr('src', contactImg);
+                $('.flex-1 .bg-gray-800 img').attr('alt', contactName);
+
+                var messageHtml = `
+                             <div class="flex space-x-3">
+                                <img src="${contactImg}"
+                                    alt="Harvey" class="w-8 h-8 rounded-full">
+                                <div class="flex-1">
+                                    <div class="bg-gray-700 rounded-lg p-3 max-w-md">
+                                        <p class="text-white">${data.message}</p>
+                                    </div>
+                                    <p class="text-xs text-gray-400 mt-1">just now</p>
+                                </div>
+                            </div>
+                        `;
+              $('#messagesArea').append(messageHtml);
+
+        });
+    </script>
+
 
     <script>
         $(document).ready(function() {
