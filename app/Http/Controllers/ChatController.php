@@ -7,14 +7,22 @@ use Illuminate\Http\Request;
 
 class ChatController extends Controller
 {
-    public function index(){
+    public function index()
+    {
         $watsAppService = new WhatsappService();
-        $data =[
+        $data = [
             'conversations' => $watsAppService->getConversations(),
         ];
         // dd($data);
 
         return view('chats.index', $data);
+    }
+
+    public function sendTemplateMessage(Request $request)
+    {
+        $watsAppService = new WhatsappService();
+        $response = $watsAppService->sendWhatsAppMessage($request);
+        return response()->json($response);
     }
 
     public function getMessages($conversationSid)

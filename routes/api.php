@@ -22,3 +22,4 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 
 
 Route::post('message/reply', [ChatController::class, 'sendAutoReply']);
+Route::post('send-template-message', [ChatController::class, 'sendTemplateMessage']);

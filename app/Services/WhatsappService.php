@@ -5,6 +5,7 @@ namespace App\Services;
 use Twilio\Rest\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class WhatsappService
 {
@@ -35,6 +36,47 @@ class WhatsappService
 
         // load OpenAI key from config/services.php → .env
         $this->openAiKey = config('services.openai.key');
+    }
+
+    // send first template message
+    public function sendWhatsAppMessage($request)
+    {
+        $recipientNumber = 'whatsapp:+923466363116';
+        $friendlyName = "+923466363116";
+        $message = "Hello from Programming Experience";
+        $contentSid = "HX1ae7bac573156bfd28607c4d45fb2957"; // Your ContentSid
+
+        // Twilio SDK Client
+        $twilio = $this->twilio;
+
+        try {
+            // Step 1: Create a new conversation
+            $conversation = $twilio->conversations->v1->conversations->create([
+                'friendlyName' => $friendlyName
+            ]);
+
+            // Step 2: Add participant (the WhatsApp user)
+            $twilio->conversations->v1->conversations($conversation->sid)
+                ->participants
+                ->create([
+                    'messagingBindingAddress' => $recipientNumber,
+                    'messagingBindingProxyAddress' =>  $this->whatsappFrom
+                ]);
+
+            // Step 3: Send a message to the created conversation
+            $messageInstance = $twilio->conversations->v1->conversations($conversation->sid)
+                ->messages
+                ->create([
+                    'author' => 'system',
+                    'body' => $message,
+                    'contentSid' => $contentSid,
+                    'contentVariables' => json_encode(["1" => "Simon", "2" => "habib"]) // Your dynamic variables
+                ]);
+
+            return response()->json(['message' => 'WhatsApp message sent successfully', 'conversation_sid' => $conversation->sid, 'message_sid' => $messageInstance->sid]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     /**
@@ -137,6 +179,9 @@ class WhatsappService
      */
     public function handleIncoming(Request $request)
     {
+         Log::info('WhatsApp webhook payload:', $request->all());
+
+
         $userText = $request->input('Body');
 
         // 1) Get the OpenAI response
@@ -155,6 +200,7 @@ class WhatsappService
 
         // 2) Send back over WhatsApp
         $userNumber = $request->input('From');
+        $userNumber = str_replace('whatsapp:', '', $userNumber);
         $conversations = $this->getConversations();
         $conversationSid = null;
         foreach ($conversations as $conv) {
