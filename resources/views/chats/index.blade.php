@@ -77,6 +77,7 @@
             </div>
         </div>
 
+        <input type="hidden" name="" id="user_profile" value="{{ asset('assets/images/profile.png') }}">
         <!-- Main Chat Area -->
         <div class="flex-1 flex flex-col bg-gray-900">
             <!-- Chat Header -->
@@ -166,11 +167,9 @@
             console.log('Received data:', data);
             console.log('sid:', data.sid); // Log the sid
 
-               
-                $('#chatHeaderName').text(contactName);
-                $('.flex-1 .bg-gray-800 img').attr('src', contactImg);
-                $('.flex-1 .bg-gray-800 img').attr('alt', contactName);
 
+               var contactImg = $('#user_profile').val(); // Get the user profile image
+               var sid = $('#chat-sid').val(); // Get the current chat sid
                 var messageHtml = `
                              <div class="flex space-x-3">
                                 <img src="${contactImg}"
