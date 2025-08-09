@@ -185,7 +185,7 @@
             }
 
             // Check if the message is from the system or user
-            if(data.sender === 'user'){
+            if (data.sender === 'user') {
                 var messageHtml = `
                                  <div class="flex space-x-3">
                                     <img src="${contactImg}"
@@ -198,8 +198,8 @@
                                     </div>
                                 </div>
                             `;
-            }else{
-                 var messageHtml = `
+            } else {
+                var messageHtml = `
                             <div class="flex space-x-3 justify-end">
                                 <div class="flex-1 text-right">
                                     <div class="bg-blue-600 rounded-lg p-3 max-w-md inline-block">
@@ -341,6 +341,10 @@
             $('.bg-gray-800:last-child input').on('keypress', function(e) {
                 if (e.which === 13) { // Enter key
                     const message = $(this).val().trim();
+                    var currenttime = new Date().toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
                     if (message) {
                         // Add message to chat (placeholder functionality)
                         const messageHtml = `
@@ -349,7 +353,7 @@
                                     <div class="bg-blue-600 rounded-lg p-3 max-w-md inline-block">
                                         <p class="text-white">${message}</p>
                                     </div>
-                                    <p class="text-xs text-gray-400 mt-1">Just now</p>
+                                    <p class="text-xs text-gray-400 mt-1">${currenttime}</p>
                                 </div>
                                 <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face"
                                      alt="Mike" class="w-8 h-8 rounded-full">
@@ -387,6 +391,10 @@
             $('.bg-gray-800:last-child button:last-child').on('click', function() {
                 const messageInput = $('.bg-gray-800:last-child input');
                 const message = messageInput.val().trim();
+                var currenttime = new Date().toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
                 if (message) {
                     const messageHtml = `
                         <div class="flex space-x-3 justify-end">
@@ -394,7 +402,7 @@
                                 <div class="bg-blue-600 rounded-lg p-3 max-w-md inline-block">
                                     <p class="text-white">${message}</p>
                                 </div>
-                                <p class="text-xs text-gray-400 mt-1">Just now</p>
+                                <p class="text-xs text-gray-400 mt-1">${currenttime}</p>
                             </div>
                             <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face"
                                  alt="Mike" class="w-8 h-8 rounded-full">
