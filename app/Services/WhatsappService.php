@@ -213,8 +213,9 @@ class WhatsappService
             }
         }
 
-        event(new MessageSent($userText, $conversationSid));
+        event(new MessageSent($userText, $conversationSid, 'user'));
         $this->sendCustomMessage( $conversationSid,  trim($reply)  );
+        event(new MessageSent(trim($reply), $conversationSid, 'admin'));
 
         return response()->noContent();
     }

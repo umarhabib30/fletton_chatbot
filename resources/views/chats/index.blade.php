@@ -151,7 +151,13 @@
         </div>
     </div>
 
-     <script>
+    <script>
+        function scrollToBottom() {
+            var messagesArea = document.getElementById('messagesArea');
+            messagesArea.scrollTop = messagesArea.scrollHeight;
+        }
+
+
         // Enable pusher logging - don't include this in production
         Pusher.logToConsole = true;
 
@@ -165,25 +171,49 @@
         // Bind to the 'my-event' event that is broadcasted from Laravel
         channel.bind('my-event', function(data) {
             console.log('Received data:', data);
-            console.log('sid:', data.sid); // Log the sid
+            console.log('sid:', data.sid);
 
+            var contactImg = $('#user_profile').val();
+            var sid = $('#chat-sid').val();
+            var currenttime = new Date().toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
 
-               var contactImg = $('#user_profile').val(); // Get the user profile image
-               var sid = $('#chat-sid').val(); // Get the current chat sid
+            if (data.sid !== sid) {
+                return; // Ignore messages not for the current chat
+            }
+
+            // Check if the message is from the system or user
+            if(data.sender === 'user'){
                 var messageHtml = `
-                             <div class="flex space-x-3">
-                                <img src="${contactImg}"
-                                    alt="Harvey" class="w-8 h-8 rounded-full">
-                                <div class="flex-1">
-                                    <div class="bg-gray-700 rounded-lg p-3 max-w-md">
+                                 <div class="flex space-x-3">
+                                    <img src="${contactImg}"
+                                        alt="Harvey" class="w-8 h-8 rounded-full">
+                                    <div class="flex-1">
+                                        <div class="bg-gray-700 rounded-lg p-3 max-w-md">
+                                            <p class="text-white">${data.message}</p>
+                                        </div>
+                                        <p class="text-xs text-gray-400 mt-1">${currenttime }</p>
+                                    </div>
+                                </div>
+                            `;
+            }else{
+                 var messageHtml = `
+                            <div class="flex space-x-3 justify-end">
+                                <div class="flex-1 text-right">
+                                    <div class="bg-blue-600 rounded-lg p-3 max-w-md inline-block">
                                         <p class="text-white">${data.message}</p>
                                     </div>
-                                    <p class="text-xs text-gray-400 mt-1">just now</p>
+                                    <p class="text-xs text-gray-400 mt-1">${currenttime}</p>
                                 </div>
+                                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face"
+                                    alt="Mike" class="w-8 h-8 rounded-full">
                             </div>
                         `;
-              $('#messagesArea').append(messageHtml);
-
+            }
+            $('#messagesArea').append(messageHtml);
+            scrollToBottom();
         });
     </script>
 
@@ -274,6 +304,8 @@
                             $('#messagesArea').append(
                                 '<p>No messages found.</p>'); // If no messages exist
                         }
+
+                        scrollToBottom();
                     },
                     error: function() {
                         alert('Error fetching messages!');
