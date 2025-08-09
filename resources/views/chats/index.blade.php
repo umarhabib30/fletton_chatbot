@@ -166,7 +166,7 @@
             console.log('Received data:', data);
             console.log('sid:', data.sid); // Log the sid
 
-                $('#chat-sid').val(sid);
+               
                 $('#chatHeaderName').text(contactName);
                 $('.flex-1 .bg-gray-800 img').attr('src', contactImg);
                 $('.flex-1 .bg-gray-800 img').attr('alt', contactName);
