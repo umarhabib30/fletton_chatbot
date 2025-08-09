@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\MessageSent;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
 
@@ -13,7 +14,6 @@ class ChatController extends Controller
         $data = [
             'conversations' => $watsAppService->getConversations(),
         ];
-        // dd($data);
 
         return view('chats.index', $data);
     }
@@ -46,4 +46,6 @@ class ChatController extends Controller
         $response = $watsAppService->handleIncoming($request);
         return response()->noContent();
     }
+
+   
 }

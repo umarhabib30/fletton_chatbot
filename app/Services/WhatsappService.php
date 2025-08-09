@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\MessageSent;
 use Twilio\Rest\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -183,6 +184,8 @@ class WhatsappService
 
 
         $userText = $request->input('Body');
+
+        broadcast(new MessageSent($userText));
 
         // 1) Get the OpenAI response
         $aiResponse = Http::withHeaders([

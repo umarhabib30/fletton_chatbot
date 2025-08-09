@@ -8,9 +8,29 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
+
+    <script src="https://cdn.jsdelivr.net/npm/pusher-js@7.0.3/dist/web/pusher.min.js"></script>
+<script src="{{ mix('js/app.js') }}"></script>
+
 </head>
 
 <body class="bg-gray-900 text-white h-screen overflow-hidden">
+
+
+<script>
+    // Make sure Echo and Pusher are available
+    window.Echo.channel('chat')
+        .listen('MessageSent', (event) => {
+            console.log(event.message); // You can log the message
+            alert(event.message); // Show an alert with the message
+            // Add the new message to the chat container
+            // let messageContainer = document.getElementById('messages');
+            // messageContainer.innerHTML += `<p>${event.message}</p>`;
+        });
+</script>
+
+
+
     <div class="flex h-screen">
         <!-- Sidebar -->
         <div class="w-80 bg-gray-800 border-r border-gray-700 flex flex-col">

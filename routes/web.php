@@ -24,8 +24,3 @@ Route::get('chats', [ChatController::class, 'index']);
 Route::get('chat/messages/{conversationSid}', [ChatController::class, 'getMessages']);
 Route::post('send-message', [ChatController::class, 'sendCustomMessage']);
 
-
-Route::get('/send-whatsapp', [WhatsAppController::class, 'sendWhatsAppMessage']);
-Route::get('/whatsapp/conversations', [WhatsAppController::class, 'getConversations']);
-Route::get('/whatsapp/conversation/messages/{conversationSid}', [WhatsAppController::class, 'getMessages']);
-Route::get('conversation/delete/{conversationSid}', [WhatsAppController::class, 'deleteConversation']);
