@@ -89,7 +89,7 @@
                         <div>
                             <h3 class="font-semibold text-white" id="chatHeaderName">Harvey Specter</h3>
                             {{-- <p class="text-sm text-green-400">Online</p> --}}
-                            <input type="hidden" name="" id="chat-sid">
+                            <input type="text" name="" id="chat-sid">
                         </div>
                     </div>
                     <div class="flex items-center space-x-4">
