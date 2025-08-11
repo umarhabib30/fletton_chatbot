@@ -55,13 +55,20 @@ class ChatController extends Controller
     {
         try {
             $chat = ChatControll::where('sid', $sid)->first();
-            $chat->update([
-                'auto_reply' => false,
-            ]);
-            return response()->json([
-                'success' => true,
-                'message' => 'Chat auto replies are paused successfully',
-            ]);
+            if($chat){
+                $chat->update([
+                    'auto_reply' => false,
+                ]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Chat auto replies are paused successfully',
+                ]);
+            }else{
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chat not found',
+                ]);
+            }
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,

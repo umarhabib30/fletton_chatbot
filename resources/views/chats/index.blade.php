@@ -247,6 +247,7 @@
                     url : "{{ url('autoreply/stop') }}/" + sid,
                     method :'GET',
                     success:function(response){
+                        console.log(response);
                         if(response.success){
                             $('#pause_autoreply').addClass('hidden');
                             $('#resume_autoreply').removeClass('hidden');
