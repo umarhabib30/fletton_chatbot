@@ -123,12 +123,24 @@
             <!-- Message Input -->
             <div class="bg-gray-800 border-t border-gray-700 p-4 chat-input hidden">
                 <div class="flex items-center space-x-3">
-                    <button class="text-gray-400 hover:text-white">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <!-- Pause Autoreply Button -->
+                    <button id="pause_autoreply"
+                        class="inline-flex items-center px-5 py-2.5 text-sm font-medium text-red-400 bg-red-400/10 hover:bg-red-400/20 hover:text-red-300 rounded-lg border border-red-400/30 hover:border-red-400/50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-400/50 focus:ring-offset-2 focus:ring-offset-gray-800">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
+                        Pause Autoreply
                     </button>
+                    <button id="resume_autoreply"
+                        class="inline-flex items-center px-5 py-2.5 text-sm font-medium text-green-400 bg-green-400/10 hover:bg-green-400/20 hover:text-green-300 rounded-lg border border-green-400/30 hover:border-green-400/50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-400/50 focus:ring-offset-2 focus:ring-offset-gray-800">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1.01M15 10h1.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z M8 12l4 4 4-4m0 6H8a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2z" />
+                        </svg>
+                        Resume Autoreply
+                    </button>
+
                     <div class="flex-1 relative">
                         <input type="text" placeholder="Write your message..."
                             class="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10">
@@ -140,6 +152,7 @@
                             </svg>
                         </button>
                     </div>
+
                     <button class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -148,10 +161,15 @@
                     </button>
                 </div>
             </div>
+
         </div>
     </div>
 
     <script>
+
+
+
+
         function scrollToBottom() {
             var messagesArea = document.getElementById('messagesArea');
             messagesArea.scrollTop = messagesArea.scrollHeight;
@@ -220,6 +238,43 @@
 
     <script>
         $(document).ready(function() {
+
+            // pause auto replies
+            $('body').on('click', '#pause_autoreply',function(e){
+                e.preventDefault();
+                var sid = $('#chat-sid').val();
+                $.ajax({
+                    url : "{{ url('autoreply/stop') }}/" + sid,
+                    method :'GET',
+                    success:function(response){
+                        if(response.success){
+                            $('#pause_autoreply').addClass('hidden');
+                            $('#resume_autoreply').removeClass('hidden');
+                        }
+                    },error: function() {
+                        alert('Error while changing status!');
+                    }
+                });
+            });
+
+            // resume autoreply
+            $('body').on('click', '#resume_autoreply',function(e){
+                e.preventDefault();
+                var sid = $('#chat-sid').val();
+                $.ajax({
+                    url : "{{ url('autoreply/resume') }}/" + sid,
+                    method :'GET',
+                    success:function(response){
+                        if(response.success){
+                            $('#pause_autoreply').removeClass('hidden');
+                            $('#resume_autoreply').addClass('hidden');
+                        }
+                    },error: function() {
+                        alert('Error while changing status!');
+                    }
+                });
+            });
+
             // Search functionality
             $('#searchInput').on('input', function() {
                 const searchTerm = $(this).val().toLowerCase();
@@ -246,7 +301,7 @@
                 // Remove active class from all contacts
                 $('.contact-item').removeClass('active');
                 $('.chat-header').removeClass('hidden');
-                $('.chat-input').removeClass('hidden');
+
 
                 // Add active class to clicked contact
                 $(this).addClass('active');
@@ -266,6 +321,14 @@
                     url: "{{ url('chat/messages') }}" + '/' + $(this).attr('sid'),
                     method: 'GET',
                     success: function(data) {
+                        if(data.auto_reply  == 1){
+                            $('#pause_autoreply').removeClass('hidden');
+                            $('#resume_autoreply').addClass('hidden');
+                        }else{
+                            $('#pause_autoreply').addClass('hidden');
+                            $('#resume_autoreply').removeClass('hidden');
+                        }
+                        $('.chat-input').removeClass('hidden');
                         $('#messagesArea').empty(); // Clear previous messages
                         if (data.messages && data.messages.length > 0) {
                             data.messages.forEach(function(message) {

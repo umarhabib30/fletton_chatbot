@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\WhatsAppController;
 use Illuminate\Support\Facades\Route;
@@ -15,13 +16,16 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
+Route::get('login', [AuthController::class, 'index'])->name('login');
+Route::post('login', [AuthController::class, 'login'])->name('admin.login');
+
+Route::group(['middleware' => ['auth']], function () {
+    Route::get('/', [ChatController::class, 'index']);
+    Route::get('chat/messages/{conversationSid}', [ChatController::class, 'getMessages']);
+    Route::post('send-message', [ChatController::class, 'sendCustomMessage']);
+    Route::get('autoreply/stop/{sid}', [ChatController::class, 'stopAutoReply']);
+    Route::get('autoreply/resume/{sid}' , [ChatController::class, 'resumeAutoReply']);
 });
 
-
-Route::get('chats', [ChatController::class, 'index']);
-Route::get('chat/messages/{conversationSid}', [ChatController::class, 'getMessages']);
-Route::post('send-message', [ChatController::class, 'sendCustomMessage']);
 
 

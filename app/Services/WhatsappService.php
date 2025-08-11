@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Events\MessageSent;
+use App\Models\ChatControll;
 use Twilio\Rest\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -49,43 +50,81 @@ class WhatsappService
     // send first template message
     public function sendWhatsAppMessage($request)
     {
-        $recipientNumber = 'whatsapp:+923466363116';
-        $friendlyName = "+923466363116";
-        $message = "Hello from Programming Experience";
-        $contentSid = "HX1ae7bac573156bfd28607c4d45fb2957"; // Your ContentSid
+        $recipientNumber = 'whatsapp:+923096176606';
+        $friendlyName    = '+923096176606';
+        $message         = 'Hello from Programming Experience';
+        $contentSid      = 'HX1ae7bac573156bfd28607c4d45fb2957';
 
-        // Twilio SDK Client
-        $twilio = $this->twilio;
+        $twilio       = $this->twilio;          // \Twilio\Rest\Client
+        $proxyAddress = $this->whatsappFrom;    // e.g. 'whatsapp:+14155238886'
 
         try {
-            // Step 1: Create a new conversation
-            $conversation = $twilio->conversations->v1->conversations->create([
-                'friendlyName' => $friendlyName
-            ]);
+            // 0) Try to find an existing conversation for this participant (and proxy)
+            $existingSid = null;
+            $pcs = $twilio->conversations->v1->participantConversations
+                ->read(['address' => $recipientNumber], 20); // Twilio SDK url-encodes the '+'
 
-            // Step 2: Add participant (the WhatsApp user)
-            $twilio->conversations->v1->conversations($conversation->sid)
-                ->participants
-                ->create([
-                    'messagingBindingAddress' => $recipientNumber,
-                    'messagingBindingProxyAddress' =>  $this->whatsappFrom
-                ]);
+            foreach ($pcs as $pc) {
+                // Defensive: make sure we match the same proxy/sender
+                $binding = $pc->participantMessagingBinding ?? null;
+                if ($binding && isset($binding['proxy_address']) && $binding['proxy_address'] === $proxyAddress) {
+                    $existingSid = $pc->conversationSid;
+                    break;
+                }
+            }
 
-            // Step 3: Send a message to the created conversation
-            $messageInstance = $twilio->conversations->v1->conversations($conversation->sid)
+            if (!$existingSid) {
+                // 1) Create a new conversation
+                $conversation = $twilio->conversations->v1->conversations
+                    ->create(['friendlyName' => $friendlyName]);
+
+                $existingSid = $conversation->sid;
+
+                // 2) Add participant (may 409 if a race condition; ignore if so)
+                try {
+                    $twilio->conversations->v1->conversations($existingSid)
+                        ->participants
+                        ->create([
+                            'messagingBindingAddress'       => $recipientNumber,
+                            'messagingBindingProxyAddress'  => $proxyAddress,
+                        ]);
+                } catch (\Twilio\Exceptions\RestException $e) {
+                    // 50437/50416 → participant or binding already exists; proceed
+                    if ($e->getStatusCode() != 409) {
+                        throw $e;
+                    }
+                }
+            }
+
+            // 3) Send your (template) message on the located/created conversation
+            $msg = $twilio->conversations->v1->conversations($existingSid)
                 ->messages
                 ->create([
-                    'author' => 'system',
-                    'body' => $message,
-                    'contentSid' => $contentSid,
-                    'contentVariables' => json_encode(["1" => "Simon", "2" => "habib"]) // Your dynamic variables
+                    'author'           => 'system',
+                    'body'             => $message,        // optional if you rely on contentSid only
+                    'contentSid'       => $contentSid,     // WhatsApp template via Content API
+                    'contentVariables' => json_encode(["1" => "Simon", "2" => "habib"]),
                 ]);
 
-            return response()->json(['message' => 'WhatsApp message sent successfully', 'conversation_sid' => $conversation->sid, 'message_sid' => $messageInstance->sid]);
+            // 4) Persist for next time so you can jump straight to sending
+            ChatControll::updateOrCreate(
+                ['sid' => $existingSid],
+                ['contact' => $friendlyName, 'auto_reply' => true]
+            );
+
+            return response()->json([
+                'message'          => 'WhatsApp message sent successfully',
+                'conversation_sid' => $existingSid,
+                'message_sid'      => $msg->sid,
+            ]);
+        } catch (\Twilio\Exceptions\RestException $e) {
+            // Fallback: if Twilio already told us the conversation sid in the 409 message, you can parse it and retry send
+            return response()->json(['error' => $e->getMessage()], 500);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
 
     /**
      * Send a custom conversation message
@@ -207,13 +246,19 @@ class WhatsappService
         // Emit user message to your UI
         event(new MessageSent($userText, $conversationSid, 'user'));
 
+        // if auto reply is off it will not call gpt api
+        $chatControll = ChatControll::where('sid', $conversationSid)->first();
+        if (!$chatControll->auto_reply) {
+            return response()->noContent();
+        }
+
         // Run the assistant and fetch an HTML reply
         try {
             $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText);
             $replyText = $this->htmlToWhatsappText($replyHtml);
         } catch (\Throwable $e) {
             Log::error('Assistant error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            $replyText = 'Sorry, something went wrong.';
+            $replyText = 'Please wait!';
         }
 
         // Send reply into your chat & WhatsApp
