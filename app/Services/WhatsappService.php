@@ -210,14 +210,15 @@ class WhatsappService
         // Run the assistant and fetch an HTML reply
         try {
             $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText);
+            $replyText = $this->htmlToWhatsappText($replyHtml);
         } catch (\Throwable $e) {
-            Log::error('Assistant error: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            $replyHtml = 'Sorry, something went wrong.';
+            Log::error('Assistant error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            $replyText = 'Sorry, something went wrong.';
         }
 
         // Send reply into your chat & WhatsApp
-        $this->sendCustomMessage($conversationSid, $replyHtml);
-        event(new MessageSent($replyHtml, $conversationSid, 'admin'));
+        $this->sendCustomMessage($conversationSid, $replyText);
+        event(new MessageSent($replyText, $conversationSid, 'admin'));
 
         return response()->noContent();
     }
@@ -238,7 +239,7 @@ class WhatsappService
             ])->post('https://api.openai.com/v1/threads', []);
 
             if (!$resp->ok()) {
-                throw new \RuntimeException('Failed to create thread: '.$resp->body());
+                throw new \RuntimeException('Failed to create thread: ' . $resp->body());
             }
 
             return (string) data_get($resp->json(), 'id');
@@ -263,7 +264,7 @@ class WhatsappService
         ]);
 
         if (!$addMsg->ok()) {
-            throw new \RuntimeException('Failed to add message: '.$addMsg->body());
+            throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
         }
 
         // 2) Create a run for your Assistant
@@ -276,7 +277,7 @@ class WhatsappService
         ]);
 
         if (!$run->ok()) {
-            throw new \RuntimeException('Failed to create run: '.$run->body());
+            throw new \RuntimeException('Failed to create run: ' . $run->body());
         }
 
         $runId = (string) data_get($run->json(), 'id');
@@ -297,7 +298,7 @@ class WhatsappService
             ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
 
             if (!$statusResp->ok()) {
-                throw new \RuntimeException('Failed to check run: '.$statusResp->body());
+                throw new \RuntimeException('Failed to check run: ' . $statusResp->body());
             }
 
             $status = (string) data_get($statusResp->json(), 'status', 'queued');
@@ -329,7 +330,7 @@ class WhatsappService
         ]);
 
         if (!$messagesResp->ok()) {
-            throw new \RuntimeException('Failed to list messages: '.$messagesResp->body());
+            throw new \RuntimeException('Failed to list messages: ' . $messagesResp->body());
         }
 
         $items = (array) data_get($messagesResp->json(), 'data', []);
@@ -351,5 +352,25 @@ class WhatsappService
 
         // Fallback
         return 'Thanks for your message. We’ll be back in touch shortly.';
+    }
+
+
+    // In WhatsappService
+
+    protected function htmlToWhatsappText(string $html): string
+    {
+        // Normalise <br> and paragraph breaks to newlines
+        $normalized = preg_replace('/<\s*br\s*\/?>/i', "\n", $html);
+        $normalized = preg_replace('/<\/\s*p\s*>/i', "\n\n", $normalized);
+
+        // Remove all remaining tags
+        $text = strip_tags($normalized);
+
+        // Decode entities (&nbsp; → space, etc.)
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        // Trim excess whitespace/newlines
+        $text = preg_replace("/\n{3,}/", "\n\n", $text);
+        return trim($text);
     }
 }
