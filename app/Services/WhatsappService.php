@@ -7,6 +7,7 @@ use Twilio\Rest\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class WhatsappService
 {
@@ -24,6 +25,12 @@ class WhatsappService
      * @var string
      */
     protected $openAiKey;
+
+    /**
+     * Your Assistant ID (Flettons Customer Services)
+     * as configured in OpenAI.
+     */
+    protected string $assistantId = 'asst_PY5ZXiliSAQjA7scJ8mTdR66';
 
     public function __construct()
     {
@@ -125,7 +132,6 @@ class WhatsappService
                 'date_created'  => $c->dateCreated->format('Y-m-d H:i:s'),
             ], $convs);
         } catch (\Exception $e) {
-            // you could also throw or return [] depending on design
             return ['error' => $e->getMessage()];
         }
     }
@@ -176,47 +182,174 @@ class WhatsappService
     }
 
     /**
-     * Handle an incoming WhatsApp message, pass to OpenAI, and reply
+     * Handle an incoming WhatsApp message → run Assistants API (v2) → reply with Assistant HTML
      */
     public function handleIncoming(Request $request)
     {
-         Log::info('WhatsApp webhook payload:', $request->all());
+        Log::info('WhatsApp webhook payload:', $request->all());
 
+        $userText = trim((string) $request->input('Body', ''));
+        if ($userText === '') {
+            return response()->noContent();
+        }
 
-        $userText = $request->input('Body');
-
-
-
-        // 1) Get the OpenAI response
-        $aiResponse = Http::withHeaders([
-            'Authorization' => "Bearer {$this->openAiKey}",
-            'Content-Type'  => 'application/json',
-        ])->post('https://api.openai.com/v1/chat/completions', [
-            'model'    => 'gpt-3.5-turbo',
-            'messages' => [
-                ['role' => 'user', 'content' => $userText],
-            ],
-        ]);
-
-        $reply = $aiResponse->json('choices.0.message.content')
-            ?? 'Sorry, something went wrong.';
-
-        // 2) Send back over WhatsApp
-        $userNumber = $request->input('From');
-        $userNumber = str_replace('whatsapp:', '', $userNumber);
+        // Normalise WhatsApp number and find Twilio Conversation SID
+        $userNumber = str_replace('whatsapp:', '', (string) $request->input('From', ''));
         $conversations = $this->getConversations();
         $conversationSid = null;
         foreach ($conversations as $conv) {
-            if ($conv['friendly_name'] === $userNumber) {
+            if (($conv['friendly_name'] ?? null) === $userNumber) {
                 $conversationSid = $conv['sid'];
                 break;
             }
         }
 
+        // Emit user message to your UI
         event(new MessageSent($userText, $conversationSid, 'user'));
-        $this->sendCustomMessage( $conversationSid,  trim($reply)  );
-        event(new MessageSent(trim($reply), $conversationSid, 'admin'));
+
+        // Run the assistant and fetch an HTML reply
+        try {
+            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText);
+        } catch (\Throwable $e) {
+            Log::error('Assistant error: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            $replyHtml = 'Sorry, something went wrong.';
+        }
+
+        // Send reply into your chat & WhatsApp
+        $this->sendCustomMessage($conversationSid, $replyHtml);
+        event(new MessageSent($replyHtml, $conversationSid, 'admin'));
 
         return response()->noContent();
+    }
+
+    /**
+     * Create or reuse a Thread ID for this WhatsApp number.
+     * Uses Cache forever; switch to DB if you prefer persistent mapping.
+     */
+    protected function getOrCreateThreadId(string $userNumber): string
+    {
+        $cacheKey = "flettons:assistant_thread:{$userNumber}";
+
+        return Cache::rememberForever($cacheKey, function () {
+            $resp = Http::withHeaders([
+                'Authorization' => "Bearer {$this->openAiKey}",
+                'Content-Type'  => 'application/json',
+                'OpenAI-Beta'   => 'assistants=v2',
+            ])->post('https://api.openai.com/v1/threads', []);
+
+            if (!$resp->ok()) {
+                throw new \RuntimeException('Failed to create thread: '.$resp->body());
+            }
+
+            return (string) data_get($resp->json(), 'id');
+        });
+    }
+
+    /**
+     * Run the Assistant on the user’s thread and return the latest assistant HTML.
+     */
+    protected function runAssistantAndGetReply(string $userNumber, string $userText): string
+    {
+        $threadId = $this->getOrCreateThreadId($userNumber);
+
+        // 1) Add the user message to the thread
+        $addMsg = Http::withHeaders([
+            'Authorization' => "Bearer {$this->openAiKey}",
+            'Content-Type'  => 'application/json',
+            'OpenAI-Beta'   => 'assistants=v2',
+        ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
+            'role'    => 'user',
+            'content' => $userText,
+        ]);
+
+        if (!$addMsg->ok()) {
+            throw new \RuntimeException('Failed to add message: '.$addMsg->body());
+        }
+
+        // 2) Create a run for your Assistant
+        $run = Http::withHeaders([
+            'Authorization' => "Bearer {$this->openAiKey}",
+            'Content-Type'  => 'application/json',
+            'OpenAI-Beta'   => 'assistants=v2',
+        ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", [
+            'assistant_id' => $this->assistantId,
+        ]);
+
+        if (!$run->ok()) {
+            throw new \RuntimeException('Failed to create run: '.$run->body());
+        }
+
+        $runId = (string) data_get($run->json(), 'id');
+
+        // 3) Poll until completed (simple backoff loop)
+        $maxWaitSeconds = 45;
+        $sleepMs = 600;
+        $elapsed = 0;
+
+        while (true) {
+            usleep($sleepMs * 1000);
+            $elapsed += $sleepMs / 1000;
+
+            $statusResp = Http::withHeaders([
+                'Authorization' => "Bearer {$this->openAiKey}",
+                'Content-Type'  => 'application/json',
+                'OpenAI-Beta'   => 'assistants=v2',
+            ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
+
+            if (!$statusResp->ok()) {
+                throw new \RuntimeException('Failed to check run: '.$statusResp->body());
+            }
+
+            $status = (string) data_get($statusResp->json(), 'status', 'queued');
+
+            if ($status === 'completed') {
+                break;
+            }
+
+            if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
+                $lastError = data_get($statusResp->json(), 'last_error.message') ?? 'unknown error';
+                throw new \RuntimeException("Run {$status}: {$lastError}");
+            }
+
+            if ($elapsed >= $maxWaitSeconds) {
+                throw new \RuntimeException('Run timed out waiting for completion.');
+            }
+
+            if ($sleepMs < 1500) $sleepMs += 150; // mild backoff
+        }
+
+        // 4) Fetch the latest assistant message (most recent first)
+        $messagesResp = Http::withHeaders([
+            'Authorization' => "Bearer {$this->openAiKey}",
+            'Content-Type'  => 'application/json',
+            'OpenAI-Beta'   => 'assistants=v2',
+        ])->get("https://api.openai.com/v1/threads/{$threadId}/messages", [
+            'limit' => 5,
+            'order' => 'desc',
+        ]);
+
+        if (!$messagesResp->ok()) {
+            throw new \RuntimeException('Failed to list messages: '.$messagesResp->body());
+        }
+
+        $items = (array) data_get($messagesResp->json(), 'data', []);
+        foreach ($items as $msg) {
+            if (($msg['role'] ?? '') !== 'assistant') continue;
+            $contentBlocks = $msg['content'] ?? [];
+
+            foreach ($contentBlocks as $block) {
+                // Expecting 'text' blocks with the Assistant’s HTML string
+                if (($block['type'] ?? '') === 'text') {
+                    $val = (string) data_get($block, 'text.value', '');
+                    if ($val !== '') {
+                        return $val;
+                    }
+                }
+                // (If you later use tools, you might parse 'tool_output' here.)
+            }
+        }
+
+        // Fallback
+        return 'Thanks for your message. We’ll be back in touch shortly.';
     }
 }
