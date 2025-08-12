@@ -166,10 +166,6 @@
     </div>
 
     <script>
-
-
-
-
         function scrollToBottom() {
             var messagesArea = document.getElementById('messagesArea');
             messagesArea.scrollTop = messagesArea.scrollHeight;
@@ -218,17 +214,18 @@
                             `;
             } else {
                 var messageHtml = `
-                            <div class="flex space-x-3 justify-end">
-                                <div class="flex-1 text-right">
-                                    <div class="bg-blue-600 rounded-lg p-3 max-w-md inline-block">
-                                        <p class="text-white">${data.message}</p>
-                                    </div>
-                                    <p class="text-xs text-gray-400 mt-1">${currenttime}</p>
-                                </div>
-                                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face"
-                                    alt="Mike" class="w-8 h-8 rounded-full">
+                    <div class="flex space-x-3 justify-end">
+                        <div class="flex-1 text-right">
+                            <div class="bg-blue-600 rounded-lg p-3 max-w-md inline-block text-left">
+                                <p class="text-white whitespace-pre-wrap break-words">${data.message}</p>
                             </div>
-                        `;
+                            <p class="text-xs text-gray-400 mt-1">${currenttime}</p>
+                        </div>
+                        <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face"
+                            alt="Mike" class="w-8 h-8 rounded-full">
+                    </div>
+                `;
+
             }
             $('#messagesArea').append(messageHtml);
             scrollToBottom();
@@ -240,37 +237,39 @@
         $(document).ready(function() {
 
             // pause auto replies
-            $('body').on('click', '#pause_autoreply',function(e){
+            $('body').on('click', '#pause_autoreply', function(e) {
                 e.preventDefault();
                 var sid = $('#chat-sid').val();
                 $.ajax({
-                    url : "{{ url('autoreply/stop') }}/" + sid,
-                    method :'GET',
-                    success:function(response){
+                    url: "{{ url('autoreply/stop') }}/" + sid,
+                    method: 'GET',
+                    success: function(response) {
                         console.log(response);
-                        if(response.success){
+                        if (response.success) {
                             $('#pause_autoreply').addClass('hidden');
                             $('#resume_autoreply').removeClass('hidden');
                         }
-                    },error: function() {
+                    },
+                    error: function() {
                         alert('Error while changing status!');
                     }
                 });
             });
 
             // resume autoreply
-            $('body').on('click', '#resume_autoreply',function(e){
+            $('body').on('click', '#resume_autoreply', function(e) {
                 e.preventDefault();
                 var sid = $('#chat-sid').val();
                 $.ajax({
-                    url : "{{ url('autoreply/resume') }}/" + sid,
-                    method :'GET',
-                    success:function(response){
-                        if(response.success){
+                    url: "{{ url('autoreply/resume') }}/" + sid,
+                    method: 'GET',
+                    success: function(response) {
+                        if (response.success) {
                             $('#pause_autoreply').removeClass('hidden');
                             $('#resume_autoreply').addClass('hidden');
                         }
-                    },error: function() {
+                    },
+                    error: function() {
                         alert('Error while changing status!');
                     }
                 });
@@ -322,10 +321,10 @@
                     url: "{{ url('chat/messages') }}" + '/' + $(this).attr('sid'),
                     method: 'GET',
                     success: function(data) {
-                        if(data.auto_reply  == 1){
+                        if (data.auto_reply == 1) {
                             $('#pause_autoreply').removeClass('hidden');
                             $('#resume_autoreply').addClass('hidden');
-                        }else{
+                        } else {
                             $('#pause_autoreply').addClass('hidden');
                             $('#resume_autoreply').removeClass('hidden');
                         }
@@ -336,17 +335,18 @@
                                 // Determine sender and style accordingly
                                 if (message.author == 'system') {
                                     var messageHtml = `
-                            <div class="flex space-x-3 justify-end">
-                                <div class="flex-1 text-right">
-                                    <div class="bg-blue-600 rounded-lg p-3 max-w-md inline-block">
-                                        <p class="text-white">${message.body}</p>
-                                    </div>
-                                    <p class="text-xs text-gray-400 mt-1">${formatDate(message.date_created)}</p>
-                                </div>
-                                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face"
-                                    alt="Mike" class="w-8 h-8 rounded-full">
-                            </div>
-                        `;
+                                            <div class="flex space-x-3 justify-end">
+                                                <div class="flex-1 text-right">
+                                                    <div class="bg-blue-600 rounded-lg p-3 max-w-md inline-block text-left">
+                                                        <p class="text-white whitespace-pre-wrap">${message.body}</p>
+                                                    </div>
+                                                    <p class="text-xs text-gray-400 mt-1">${formatDate(message.date_created)}</p>
+                                                </div>
+                                                <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face"
+                                                    alt="Mike" class="w-8 h-8 rounded-full">
+                                            </div>
+                                        `;
+
                                 } else {
                                     var messageHtml = `
                              <div class="flex space-x-3">
