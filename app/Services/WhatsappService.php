@@ -50,8 +50,8 @@ class WhatsappService
     // send first template message
     public function sendWhatsAppMessage($request)
     {
-        $recipientNumber = 'whatsapp:+447901333164';
-        $friendlyName    = '+447901333164';
+        $recipientNumber = 'whatsapp:+923096176606';
+        $friendlyName    = '+923096176606';
         $message         = 'Hello from Programming Experience';
         $contentSid      = 'HX1ae7bac573156bfd28607c4d45fb2957';
 
@@ -313,6 +313,7 @@ class WhatsappService
         }
 
         // 2) Create a run for your Assistant — add style + length controls here
+
         $run = Http::withHeaders([
             'Authorization' => "Bearer {$this->openAiKey}",
             'Content-Type'  => 'application/json',
@@ -320,21 +321,18 @@ class WhatsappService
         ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", [
             'assistant_id' => $this->assistantId,
 
-            // Human + concise WhatsApp tone (per-run override/augment)
             'instructions' => implode("\n", [
                 "WhatsApp tone: friendly, clear, human.",
-                "Use British English spelling, grammar, and expressions (e.g. 'colour', 'organise', 'favourite').",
                 "Cap replies at 2–4 short sentences (≈60–90 words).",
                 "Avoid fluff and long lists. If needed, 3 bullets max, 6–9 words each.",
                 "Prefer simple HTML: <p>...</p> and optional <ul><li>...</li></ul> only.",
                 "End with one simple next step or question when helpful.",
             ]),
 
-            // Length controls (Assistants v2)
-            'max_completion_tokens' => 120,  // output cap
-            'max_prompt_tokens'     => 2000, // keep context lean so replies stay focused
-        ]);
 
+            'max_completion_tokens' => 120,
+            'max_prompt_tokens'     => 2000,
+        ]);
 
         if (!$run->ok()) {
             throw new \RuntimeException('Failed to create run: ' . $run->body());
