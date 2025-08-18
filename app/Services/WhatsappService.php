@@ -255,8 +255,8 @@ class WhatsappService
         // Run the assistant and fetch an HTML reply
         try {
             $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText);
-            // $replyText = $this->htmlToWhatsappText($replyHtml);
-            $replyText = $replyHtml;
+            $replyText = $this->htmlToWhatsappText($replyHtml);
+            // $replyText = $replyHtml;
             // Send reply into your chat & WhatsApp
             $this->sendCustomMessage($conversationSid, $replyText);
             event(new MessageSent($replyText, $conversationSid, 'admin'));
@@ -408,19 +408,36 @@ class WhatsappService
     // In WhatsappService
 
     protected function htmlToWhatsappText(string $html): string
-    {
-        // Normalise <br> and paragraph breaks to newlines
-        $normalized = preg_replace('/<\s*br\s*\/?>/i', "\n", $html);
-        $normalized = preg_replace('/<\/\s*p\s*>/i', "\n\n", $normalized);
+{
+    // 1) Normalise <br> and paragraph breaks to newlines
+    $normalized = preg_replace('/<\s*br\s*\/?>/i', "\n", $html);
+    $normalized = preg_replace('/<\/\s*p\s*>/i', "\n\n", $normalized);
 
-        // Remove all remaining tags
-        $text = strip_tags($normalized);
+    // 2) Replace anchors with just their href (remove anchor text)
+    //    e.g. <a href="https://x.com">Click here</a> => https://x.com
+    $normalized = preg_replace_callback('~<a\b[^>]*>(.*?)</a>~is', function ($m) {
+        $tag = $m[0];
+        if (preg_match('~href\s*=\s*([\'"])(.*?)\1~i', $tag, $hrefMatch)) {
+            return $hrefMatch[2]; // keep only the URL
+        }
+        // No href found: drop the tag but keep inner text as last resort
+        return isset($m[1]) ? strip_tags($m[1]) : '';
+    }, $normalized);
 
-        // Decode entities (&nbsp; → space, etc.)
-        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    // 3) Remove all remaining tags
+    $text = strip_tags($normalized);
 
-        // Trim excess whitespace/newlines
-        $text = preg_replace("/\n{3,}/", "\n\n", $text);
-        return trim($text);
-    }
+    // 4) Decode entities (&nbsp; → space, etc.)
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+    // 5) Trim & tidy whitespace/newlines
+    //    - Collapse 3+ newlines to 2
+    //    - Convert Windows/Mac line endings if any slipped through
+    $text = preg_replace("/\r\n?/", "\n", $text);
+    $text = preg_replace("/\n{3,}/", "\n\n", $text);
+    $text = preg_replace('/[ \t]{2,}/', ' ', $text);
+
+    return trim($text);
+}
+
 }
