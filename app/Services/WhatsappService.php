@@ -323,6 +323,7 @@ class WhatsappService
             // Human + concise WhatsApp tone (per-run override/augment)
             'instructions' => implode("\n", [
                 "WhatsApp tone: friendly, clear, human.",
+                "Use British English spelling, grammar, and expressions (e.g. 'colour', 'organise', 'favourite').",
                 "Cap replies at 2–4 short sentences (≈60–90 words).",
                 "Avoid fluff and long lists. If needed, 3 bullets max, 6–9 words each.",
                 "Prefer simple HTML: <p>...</p> and optional <ul><li>...</li></ul> only.",
@@ -333,6 +334,7 @@ class WhatsappService
             'max_completion_tokens' => 120,  // output cap
             'max_prompt_tokens'     => 2000, // keep context lean so replies stay focused
         ]);
+
 
         if (!$run->ok()) {
             throw new \RuntimeException('Failed to create run: ' . $run->body());
@@ -408,36 +410,35 @@ class WhatsappService
     // In WhatsappService
 
     protected function htmlToWhatsappText(string $html): string
-{
-    // 1) Normalise <br> and paragraph breaks to newlines
-    $normalized = preg_replace('/<\s*br\s*\/?>/i', "\n", $html);
-    $normalized = preg_replace('/<\/\s*p\s*>/i', "\n\n", $normalized);
+    {
+        // 1) Normalise <br> and paragraph breaks to newlines
+        $normalized = preg_replace('/<\s*br\s*\/?>/i', "\n", $html);
+        $normalized = preg_replace('/<\/\s*p\s*>/i', "\n\n", $normalized);
 
-    // 2) Replace anchors with just their href (remove anchor text)
-    //    e.g. <a href="https://x.com">Click here</a> => https://x.com
-    $normalized = preg_replace_callback('~<a\b[^>]*>(.*?)</a>~is', function ($m) {
-        $tag = $m[0];
-        if (preg_match('~href\s*=\s*([\'"])(.*?)\1~i', $tag, $hrefMatch)) {
-            return $hrefMatch[2]; // keep only the URL
-        }
-        // No href found: drop the tag but keep inner text as last resort
-        return isset($m[1]) ? strip_tags($m[1]) : '';
-    }, $normalized);
+        // 2) Replace anchors with just their href (remove anchor text)
+        //    e.g. <a href="https://x.com">Click here</a> => https://x.com
+        $normalized = preg_replace_callback('~<a\b[^>]*>(.*?)</a>~is', function ($m) {
+            $tag = $m[0];
+            if (preg_match('~href\s*=\s*([\'"])(.*?)\1~i', $tag, $hrefMatch)) {
+                return $hrefMatch[2]; // keep only the URL
+            }
+            // No href found: drop the tag but keep inner text as last resort
+            return isset($m[1]) ? strip_tags($m[1]) : '';
+        }, $normalized);
 
-    // 3) Remove all remaining tags
-    $text = strip_tags($normalized);
+        // 3) Remove all remaining tags
+        $text = strip_tags($normalized);
 
-    // 4) Decode entities (&nbsp; → space, etc.)
-    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // 4) Decode entities (&nbsp; → space, etc.)
+        $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
-    // 5) Trim & tidy whitespace/newlines
-    //    - Collapse 3+ newlines to 2
-    //    - Convert Windows/Mac line endings if any slipped through
-    $text = preg_replace("/\r\n?/", "\n", $text);
-    $text = preg_replace("/\n{3,}/", "\n\n", $text);
-    $text = preg_replace('/[ \t]{2,}/', ' ', $text);
+        // 5) Trim & tidy whitespace/newlines
+        //    - Collapse 3+ newlines to 2
+        //    - Convert Windows/Mac line endings if any slipped through
+        $text = preg_replace("/\r\n?/", "\n", $text);
+        $text = preg_replace("/\n{3,}/", "\n\n", $text);
+        $text = preg_replace('/[ \t]{2,}/', ' ', $text);
 
-    return trim($text);
-}
-
+        return trim($text);
+    }
 }
