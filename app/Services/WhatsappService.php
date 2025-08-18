@@ -50,8 +50,8 @@ class WhatsappService
     // send first template message
     public function sendWhatsAppMessage($request)
     {
-        $recipientNumber = 'whatsapp:+923096176606';
-        $friendlyName    = '+923096176606';
+        $recipientNumber = 'whatsapp:+447901333164';
+        $friendlyName    = '+447901333164';
         $message         = 'Hello from Programming Experience';
         $contentSid      = 'HX1ae7bac573156bfd28607c4d45fb2957';
 
