@@ -294,110 +294,115 @@ class WhatsappService
     /**
      * Run the Assistant on the user’s thread and return the latest assistant HTML.
      */
-    protected function runAssistantAndGetReply(string $userNumber, string $userText): string
-    {
-        $threadId = $this->getOrCreateThreadId($userNumber);
+protected function runAssistantAndGetReply(string $userNumber, string $userText): string
+{
+    $threadId = $this->getOrCreateThreadId($userNumber);
 
-        // 1) Add the user message to the thread
-        $addMsg = Http::withHeaders([
-            'Authorization' => "Bearer {$this->openAiKey}",
-            'Content-Type'  => 'application/json',
-            'OpenAI-Beta'   => 'assistants=v2',
-        ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
-            'role'    => 'user',
-            'content' => $userText,
-        ]);
+    // 1) Add the user message to the thread
+    $addMsg = Http::withHeaders([
+        'Authorization' => "Bearer {$this->openAiKey}",
+        'Content-Type'  => 'application/json',
+        'OpenAI-Beta'   => 'assistants=v2',
+    ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
+        'role'    => 'user',
+        'content' => $userText,
+    ]);
 
-        if (!$addMsg->ok()) {
-            throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
-        }
-
-        // 2) Create a run for your Assistant
-        $run = Http::withHeaders([
-            'Authorization' => "Bearer {$this->openAiKey}",
-            'Content-Type'  => 'application/json',
-            'OpenAI-Beta'   => 'assistants=v2',
-        ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", [
-            'assistant_id' => $this->assistantId,
-        ]);
-
-        if (!$run->ok()) {
-            throw new \RuntimeException('Failed to create run: ' . $run->body());
-        }
-
-        $runId = (string) data_get($run->json(), 'id');
-
-        // 3) Poll until completed (simple backoff loop)
-        $maxWaitSeconds = 45;
-        $sleepMs = 600;
-        $elapsed = 0;
-
-        while (true) {
-            usleep($sleepMs * 1000);
-            $elapsed += $sleepMs / 1000;
-
-            $statusResp = Http::withHeaders([
-                'Authorization' => "Bearer {$this->openAiKey}",
-                'Content-Type'  => 'application/json',
-                'OpenAI-Beta'   => 'assistants=v2',
-            ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
-
-            if (!$statusResp->ok()) {
-                throw new \RuntimeException('Failed to check run: ' . $statusResp->body());
-            }
-
-            $status = (string) data_get($statusResp->json(), 'status', 'queued');
-
-            if ($status === 'completed') {
-                break;
-            }
-
-            if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
-                $lastError = data_get($statusResp->json(), 'last_error.message') ?? 'unknown error';
-                throw new \RuntimeException("Run {$status}: {$lastError}");
-            }
-
-            if ($elapsed >= $maxWaitSeconds) {
-                throw new \RuntimeException('Run timed out waiting for completion.');
-            }
-
-            if ($sleepMs < 1500) $sleepMs += 150; // mild backoff
-        }
-
-        // 4) Fetch the latest assistant message (most recent first)
-        $messagesResp = Http::withHeaders([
-            'Authorization' => "Bearer {$this->openAiKey}",
-            'Content-Type'  => 'application/json',
-            'OpenAI-Beta'   => 'assistants=v2',
-        ])->get("https://api.openai.com/v1/threads/{$threadId}/messages", [
-            'limit' => 5,
-            'order' => 'desc',
-        ]);
-
-        if (!$messagesResp->ok()) {
-            throw new \RuntimeException('Failed to list messages: ' . $messagesResp->body());
-        }
-
-        $items = (array) data_get($messagesResp->json(), 'data', []);
-        foreach ($items as $msg) {
-            if (($msg['role'] ?? '') !== 'assistant') continue;
-            $contentBlocks = $msg['content'] ?? [];
-
-            foreach ($contentBlocks as $block) {
-                // Expecting 'text' blocks with the Assistant’s HTML string
-                if (($block['type'] ?? '') === 'text') {
-                    $val = (string) data_get($block, 'text.value', '');
-                    if ($val !== '') {
-                        return $val;
-                    }
-                }
-                // (If you later use tools, you might parse 'tool_output' here.)
-            }
-        }
-
-        // Fallback
-        return 'Thanks for your message. We’ll be back in touch shortly.';
+    if (!$addMsg->ok()) {
+        throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
     }
+
+    // 2) Create a run for your Assistant — add style + length controls here
+    $run = Http::withHeaders([
+        'Authorization' => "Bearer {$this->openAiKey}",
+        'Content-Type'  => 'application/json',
+        'OpenAI-Beta'   => 'assistants=v2',
+    ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", [
+        'assistant_id' => $this->assistantId,
+
+        // Human + concise WhatsApp tone (per-run override/augment)
+        'instructions' => implode("\n", [
+            "WhatsApp tone: friendly, clear, human.",
+            "Cap replies at 2–4 short sentences (≈60–90 words).",
+            "Avoid fluff and long lists. If needed, 3 bullets max, 6–9 words each.",
+            "Prefer simple HTML: <p>...</p> and optional <ul><li>...</li></ul> only.",
+            "End with one simple next step or question when helpful.",
+        ]),
+
+        // Length controls (Assistants v2)
+        'max_completion_tokens' => 120,  // output cap
+        'max_prompt_tokens'     => 2000, // keep context lean so replies stay focused
+    ]);
+
+    if (!$run->ok()) {
+        throw new \RuntimeException('Failed to create run: ' . $run->body());
+    }
+
+    $runId = (string) data_get($run->json(), 'id');
+
+    // 3) Poll until completed (simple backoff loop)
+    $maxWaitSeconds = 45;
+    $sleepMs = 600;
+    $elapsed = 0;
+
+    while (true) {
+        usleep($sleepMs * 1000);
+        $elapsed += $sleepMs / 1000;
+
+        $statusResp = Http::withHeaders([
+            'Authorization' => "Bearer {$this->openAiKey}",
+            'Content-Type'  => 'application/json',
+            'OpenAI-Beta'   => 'assistants=v2',
+        ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
+
+        if (!$statusResp->ok()) {
+            throw new \RuntimeException('Failed to check run: ' . $statusResp->body());
+        }
+
+        $status = (string) data_get($statusResp->json(), 'status', 'queued');
+
+        if ($status === 'completed') break;
+
+        if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
+            $lastError = data_get($statusResp->json(), 'last_error.message') ?? 'unknown error';
+            throw new \RuntimeException("Run {$status}: {$lastError}");
+        }
+
+        if ($elapsed >= $maxWaitSeconds) {
+            throw new \RuntimeException('Run timed out waiting for completion.');
+        }
+
+        if ($sleepMs < 1500) $sleepMs += 150; // mild backoff
+    }
+
+    // 4) Fetch the latest assistant message (most recent first)
+    $messagesResp = Http::withHeaders([
+        'Authorization' => "Bearer {$this->openAiKey}",
+        'Content-Type'  => 'application/json',
+        'OpenAI-Beta'   => 'assistants=v2',
+    ])->get("https://api.openai.com/v1/threads/{$threadId}/messages", [
+        'limit' => 5,
+        'order' => 'desc',
+    ]);
+
+    if (!$messagesResp->ok()) {
+        throw new \RuntimeException('Failed to list messages: ' . $messagesResp->body());
+    }
+
+    $items = (array) data_get($messagesResp->json(), 'data', []);
+    foreach ($items as $msg) {
+        if (($msg['role'] ?? '') !== 'assistant') continue;
+        foreach (($msg['content'] ?? []) as $block) {
+            if (($block['type'] ?? '') === 'text') {
+                $val = (string) data_get($block, 'text.value', '');
+                if ($val !== '') return $val;
+            }
+        }
+    }
+
+    // Fallback (short, WhatsApp-friendly)
+    return '<p>Thanks for your message — how can I help further?</p>';
+}
 
 
     // In WhatsappService
