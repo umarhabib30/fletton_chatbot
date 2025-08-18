@@ -258,7 +258,7 @@ class WhatsappService
             $replyText = $this->htmlToWhatsappText($replyHtml);
         } catch (\Throwable $e) {
             Log::error('Assistant error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            $replyText = 'Please wait!';
+            $replyText = '';
         }
 
         // Send reply into your chat & WhatsApp
