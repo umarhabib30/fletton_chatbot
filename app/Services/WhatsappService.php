@@ -255,7 +255,8 @@ class WhatsappService
         // Run the assistant and fetch an HTML reply
         try {
             $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText);
-            $replyText = $this->htmlToWhatsappText($replyHtml);
+            // $replyText = $this->htmlToWhatsappText($replyHtml);
+            $replyText = $replyHtml;
             // Send reply into your chat & WhatsApp
             $this->sendCustomMessage($conversationSid, $replyText);
             event(new MessageSent($replyText, $conversationSid, 'admin'));
