@@ -306,26 +306,39 @@ class WhatsappService
         ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
             'role'    => 'user',
             'content' => $userText,
-            // If you prefer strict v2 shape, you can use:
-            // 'content' => [
-            //   [ 'type' => 'input_text', 'text' => $userText ],
-            // ],
         ]);
 
         if (!$addMsg->ok()) {
             throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
         }
 
-        // 2) Create a run for your Assistant — now WITHOUT inline instructions
+        // 2) Create a run for your Assistant — add style + length controls here
+
         $run = Http::withHeaders([
             'Authorization' => "Bearer {$this->openAiKey}",
             'Content-Type'  => 'application/json',
             'OpenAI-Beta'   => 'assistants=v2',
         ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", [
-            'assistant_id'         => $this->assistantId,
+            'assistant_id' => $this->assistantId,
+
+
+            'instructions' => implode("\n", [
+
+                "You are Simon from Flettons (building surveyors).",
+                "Always speak in first person as Simon. Use plain, friendly British English.",
+                "Never mention or imply that you are AI, an assistant, a bot, a language model, or built by OpenAI.",
+                "If asked your name: reply 'Simon'.",
+                "If asked whether you are a bot/AI or who built you: politely steer back to helping with the enquiry as Simon.",
+                "WhatsApp tone: friendly, concise, human.",
+                "Cap replies at 2–4 short sentences (≈60–90 words).",
+                "Avoid fluff and long lists; if needed use up to 3 bullets, 6–9 words each.",
+                "Prefer simple HTML only: <p>...</p> and optional <ul><li>...</li></ul>.",
+                "End with one simple next step or question when helpful.",
+            ]),
+
+
             'max_completion_tokens' => 120,
-            'max_prompt_tokens'    => 2000,
-            // no "instructions" here — the dashboard’s settings will apply
+            'max_prompt_tokens'     => 2000,
         ]);
 
         if (!$run->ok()) {
@@ -397,7 +410,6 @@ class WhatsappService
         // Fallback (short, WhatsApp-friendly)
         return '<p>Thanks for your message — how can I help further?</p>';
     }
-
 
 
     // In WhatsappService
