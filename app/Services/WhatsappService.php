@@ -296,39 +296,75 @@ class WhatsappService
      */
     protected function runAssistantAndGetReply(string $userNumber, string $userText): string
     {
-        $assistantId = $this->assistantId;
-        $apiKey      = $this->openAiKey;
+        $cacheKey = "flettons:assistant_thread:{$userNumber}";
 
-        // 1) Create a run directly against the assistant
-        $payload = [
-            'input' => [
-                [
-                    'role'    => 'user',
-                    'content' => $userText,
-                ],
-            ],
-        ];
+        // Helper to add a message to a thread (with logging)
+        $addMessageToThread = function (string $threadId) use ($userText) {
+            $resp = Http::withHeaders([
+                'Authorization' => "Bearer {$this->openAiKey}",
+                'Content-Type'  => 'application/json',
+                'OpenAI-Beta'   => 'assistants=v2',
+            ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
+                'role'    => 'user',
+                'content' => $userText,
+            ]);
 
-        $runResp = Http::withHeaders([
-            'Authorization' => "Bearer {$apiKey}",
-            'Content-Type'  => 'application/json',
-            'OpenAI-Beta'   => 'assistants=v2',
-        ])->post("https://api.openai.com/v1/assistants/{$assistantId}/runs", $payload);
+            Log::debug('Assistants: add message response', [
+                'thread_id' => $threadId,
+                'status'    => $resp->status(),
+                'ok'        => $resp->ok(),
+                'body'      => $resp->json(),
+            ]);
 
-        Log::debug('Assistants: run created', [
-            'assistant_id' => $assistantId,
-            'status'       => $runResp->status(),
-            'ok'           => $runResp->ok(),
-            'body'         => $runResp->json(),
-        ]);
+            return $resp;
+        };
 
-        if (!$runResp->ok()) {
-            throw new \RuntimeException('Failed to create run: ' . $runResp->body());
+        // 0) Ensure we have a valid thread (recreate if stale)
+        $threadId = $this->getOrCreateThreadId($userNumber);
+        $addMsg   = $addMessageToThread($threadId);
+
+        if ($addMsg->status() === 404) {
+            // Thread likely invalidated or purged – recreate once
+            Log::warning('Assistants: thread 404, recreating', [
+                'thread_id'   => $threadId,
+                'user_number' => $userNumber,
+            ]);
+
+            Cache::forget($cacheKey);
+            $threadId = $this->getOrCreateThreadId($userNumber);
+
+            $addMsg = $addMessageToThread($threadId);
         }
 
-        $runId = (string) data_get($runResp->json(), 'id');
+        if (!$addMsg->ok()) {
+            throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
+        }
 
-        // 2) Poll until completion
+        // 1) Create a run (use supported knobs)
+        $runCreatePayload = [
+            'assistant_id' => $this->assistantId,
+        ];
+
+        $run = Http::withHeaders([
+            'Authorization' => "Bearer {$this->openAiKey}",
+            'Content-Type'  => 'application/json',
+            'OpenAI-Beta'   => 'assistants=v2',
+        ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", $runCreatePayload);
+
+        Log::debug('Assistants: run created', [
+            'thread_id' => $threadId,
+            'status'    => $run->status(),
+            'ok'        => $run->ok(),
+            'body'      => $run->json(),
+        ]);
+
+        if (!$run->ok()) {
+            throw new \RuntimeException('Failed to create run: ' . $run->body());
+        }
+
+        $runId = (string) data_get($run->json(), 'id');
+
+        // 2) Poll until completion with detailed state logging
         $maxWaitSeconds = 45;
         $sleepMs        = 600;
         $elapsed        = 0;
@@ -338,17 +374,17 @@ class WhatsappService
             $elapsed += $sleepMs / 1000;
 
             $statusResp = Http::withHeaders([
-                'Authorization' => "Bearer {$apiKey}",
+                'Authorization' => "Bearer {$this->openAiKey}",
                 'Content-Type'  => 'application/json',
                 'OpenAI-Beta'   => 'assistants=v2',
-            ])->get("https://api.openai.com/v1/assistants/{$assistantId}/runs/{$runId}");
+            ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
 
             if (!$statusResp->ok()) {
                 Log::error('Assistants: failed to check run', [
-                    'assistant_id' => $assistantId,
-                    'run_id'       => $runId,
-                    'status'       => $statusResp->status(),
-                    'body'         => $statusResp->body(),
+                    'thread_id' => $threadId,
+                    'run_id'    => $runId,
+                    'status'    => $statusResp->status(),
+                    'body'      => $statusResp->body(),
                 ]);
                 throw new \RuntimeException('Failed to check run: ' . $statusResp->body());
             }
@@ -357,46 +393,85 @@ class WhatsappService
             $status     = (string) data_get($statusJson, 'status', 'queued');
 
             Log::debug('Assistants: run status tick', [
-                'assistant_id' => $assistantId,
-                'run_id'       => $runId,
-                'status'       => $status,
-                'elapsed_s'    => $elapsed,
+                'thread_id' => $threadId,
+                'run_id'    => $runId,
+                'status'    => $status,
+                'elapsed_s' => $elapsed,
             ]);
 
             if ($status === 'completed') {
                 break;
             }
 
+            if ($status === 'requires_action') {
+                $toolCalls = data_get($statusJson, 'required_action.submit_tool_outputs.tool_calls', []);
+                Log::warning('Assistants: run requires tool action (not implemented)', [
+                    'thread_id' => $threadId,
+                    'run_id'    => $runId,
+                    'tool_calls' => $toolCalls,
+                ]);
+                throw new \RuntimeException('Run requires tool action but no tool outputs were provided.');
+            }
+
             if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
+                Log::error('Assistants: run terminal error', [
+                    'thread_id'  => $threadId,
+                    'run_id'     => $runId,
+                    'status'     => $status,
+                    'last_error' => data_get($statusJson, 'last_error', null),
+                    'full'       => $statusJson,
+                ]);
                 $lastError = data_get($statusJson, 'last_error.message') ?? 'unknown error';
                 throw new \RuntimeException("Run {$status}: {$lastError}");
             }
 
             if ($elapsed >= $maxWaitSeconds) {
+                Log::error('Assistants: run timed out', [
+                    'thread_id' => $threadId,
+                    'run_id'    => $runId,
+                    'last_seen' => $status,
+                ]);
                 throw new \RuntimeException('Run timed out waiting for completion.');
             }
 
-            if ($sleepMs < 1500) $sleepMs += 150;
+            if ($sleepMs < 1500) $sleepMs += 150; // mild backoff
         }
 
-        // 3) Extract assistant reply
-        $output = data_get($statusJson, 'output', []);
+        // 3) Fetch the latest assistant message (most recent first)
+        $messagesResp = Http::withHeaders([
+            'Authorization' => "Bearer {$this->openAiKey}",
+            'Content-Type'  => 'application/json',
+            'OpenAI-Beta'   => 'assistants=v2',
+        ])->get("https://api.openai.com/v1/threads/{$threadId}/messages", [
+            'limit' => 5,
+            'order' => 'desc',
+        ]);
 
-        foreach ($output as $block) {
-            if (($block['type'] ?? '') === 'message') {
-                foreach (($block['content'] ?? []) as $c) {
-                    if (($c['type'] ?? '') === 'text') {
-                        $val = (string) data_get($c, 'text.value', '');
-                        if ($val !== '') return $val;
-                    }
+        Log::debug('Assistants: messages fetch', [
+            'thread_id' => $threadId,
+            'status'    => $messagesResp->status(),
+            'ok'        => $messagesResp->ok(),
+            'body'      => $messagesResp->json(),
+        ]);
+
+        if (!$messagesResp->ok()) {
+            throw new \RuntimeException('Failed to list messages: ' . $messagesResp->body());
+        }
+
+        $items = (array) data_get($messagesResp->json(), 'data', []);
+        foreach ($items as $msg) {
+            if (($msg['role'] ?? '') !== 'assistant') continue;
+            foreach (($msg['content'] ?? []) as $block) {
+                if (($block['type'] ?? '') === 'text') {
+                    $val = (string) data_get($block, 'text.value', '');
+                    if ($val !== '') return $val;
                 }
             }
         }
 
-        // Fallback
+        // Fallback (short, WhatsApp-friendly)
         return '<p>Thanks for your message — how can I help further?</p>';
     }
-
 
 
     // In WhatsappService
