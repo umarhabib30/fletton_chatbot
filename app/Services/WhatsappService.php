@@ -340,9 +340,48 @@ class WhatsappService
             throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
         }
 
-        // 1) Create a run (use supported knobs)
+        // 1) Create a run (FORCE file_search + attach your vector store + tighten retrieval)
+        // Ensure you have set $this->vectorStoreId during your bootstrap (after uploading/ingesting files)
+        if (empty($this->vectorStoreId)) {
+            Log::error('Assistants: vector store id missing; file_search will not work as intended');
+        }
+
         $runCreatePayload = [
             'assistant_id' => $this->assistantId,
+
+            // Force the assistant to use file_search (prevents free-wheeling answers)
+            'tool_choice'  => ['type' => 'file_search'],
+
+            // You can re-specify tools at run time to override ranking knobs
+            'tools' => [[
+                'type' => 'file_search',
+                'file_search' => [
+                    'max_num_results' => 8, // keep the context tight
+                    'ranking_options' => [
+                        'score_threshold' => 0.55, // ignore weak matches
+                        // 'ranker' => 'auto'
+                    ],
+                ],
+            ]],
+
+            // Attach your vector store(s) for this run
+            'tool_resources' => [
+                'file_search' => [
+                    'vector_store_ids' => array_filter([$this->vectorStoreId ?? null]),
+                ],
+            ],
+
+            // Make it less "creative"
+            'temperature' => 0,
+
+            // (Optional) Strong guardrails to keep answers grounded
+            'instructions' => implode("\n", [
+                "You are a strict RAG bot.",
+                "Rules:",
+                "1) ALWAYS call the file_search tool before answering.",
+                "2) ONLY answer using retrieved passages; if nothing is relevant, say: \"I couldn’t find this in the knowledge base.\"",
+                "3) Keep answers concise and cite the retrieved doc names inline like [Doc: <filename>].",
+            ]),
         ];
 
         $run = Http::withHeaders([
@@ -406,8 +445,8 @@ class WhatsappService
             if ($status === 'requires_action') {
                 $toolCalls = data_get($statusJson, 'required_action.submit_tool_outputs.tool_calls', []);
                 Log::warning('Assistants: run requires tool action (not implemented)', [
-                    'thread_id' => $threadId,
-                    'run_id'    => $runId,
+                    'thread_id'  => $threadId,
+                    'run_id'     => $runId,
                     'tool_calls' => $toolCalls,
                 ]);
                 throw new \RuntimeException('Run requires tool action but no tool outputs were provided.');
@@ -437,7 +476,39 @@ class WhatsappService
             if ($sleepMs < 1500) $sleepMs += 150; // mild backoff
         }
 
-        // 3) Fetch the latest assistant message (most recent first)
+        // 2.1) OPTIONAL: verify that file_search was actually used (logs only)
+        try {
+            $stepsResp = Http::withHeaders([
+                'Authorization' => "Bearer {$this->openAiKey}",
+                'Content-Type'  => 'application/json',
+                'OpenAI-Beta'   => 'assistants=v2',
+            ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}/steps", [
+                'limit' => 20,
+            ]);
+
+            $usedFileSearch = false;
+            if ($stepsResp->ok()) {
+                $steps = (array) data_get($stepsResp->json(), 'data', []);
+                foreach ($steps as $s) {
+                    $json = json_encode($s);
+                    if (is_string($json) && str_contains($json, '"file_search"')) {
+                        $usedFileSearch = true;
+                        break;
+                    }
+                }
+            }
+
+            Log::info('Assistants: verification file_search usage', [
+                'thread_id'        => $threadId,
+                'run_id'           => $runId,
+                'used_file_search' => $usedFileSearch,
+                'steps'            => $stepsResp->json(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Assistants: failed to verify file_search usage', ['e' => $e->getMessage()]);
+        }
+
+        // 3) Fetch the latest assistant message (most recent first) + try to surface citations
         $messagesResp = Http::withHeaders([
             'Authorization' => "Bearer {$this->openAiKey}",
             'Content-Type'  => 'application/json',
@@ -458,20 +529,39 @@ class WhatsappService
             throw new \RuntimeException('Failed to list messages: ' . $messagesResp->body());
         }
 
+        $answerHtml = null;
         $items = (array) data_get($messagesResp->json(), 'data', []);
         foreach ($items as $msg) {
             if (($msg['role'] ?? '') !== 'assistant') continue;
+
             foreach (($msg['content'] ?? []) as $block) {
-                if (($block['type'] ?? '') === 'text') {
-                    $val = (string) data_get($block, 'text.value', '');
-                    if ($val !== '') return $val;
+                if (($block['type'] ?? '') !== 'text') continue;
+
+                $val = (string) data_get($block, 'text.value', '');
+                $anns = (array) data_get($block, 'text.annotations', []);
+
+                // Convert simple file citations to a readable suffix (optional, tweak as you like)
+                $citations = [];
+                foreach ($anns as $ann) {
+                    $type = $ann['type'] ?? '';
+                    if ($type === 'file_citation') {
+                        $fileId = data_get($ann, 'file_citation.file_id');
+                        $quote  = trim((string) data_get($ann, 'text', ''));
+                        if ($fileId) $citations[] = "[Source: {$fileId}]";
+                    }
+                }
+
+                if ($val !== '') {
+                    $answerHtml = $val . (count($citations) ? "<br><br><small>" . implode(' ', array_unique($citations)) . "</small>" : '');
+                    break 2;
                 }
             }
         }
 
         // Fallback (short, WhatsApp-friendly)
-        return '<p>Thanks for your message — how can I help further?</p>';
+        return $answerHtml ?: '<p>Thanks for your message — how can I help further?</p>';
     }
+
 
 
     // In WhatsappService
