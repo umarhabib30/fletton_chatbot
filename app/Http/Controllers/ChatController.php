@@ -95,4 +95,9 @@ class ChatController extends Controller
             ]);
         }
     }
+
+    public function deleteConversation($id){
+        $watsAppService = new WhatsappService();
+        return $watsAppService->deleteConversation($id);
+    }
 }
