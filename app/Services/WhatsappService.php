@@ -294,273 +294,272 @@ class WhatsappService
     /**
      * Run the Assistant on the user’s thread and return the latest assistant HTML.
      */
-    protected function runAssistantAndGetReply(string $userNumber, string $userText): string
-    {
-        $cacheKey = "flettons:assistant_thread:{$userNumber}";
+   protected function runAssistantAndGetReply(string $userNumber, string $userText): string
+{
+    $cacheKey = "flettons:assistant_thread:{$userNumber}";
 
-        // Helper to add a message to a thread (with logging)
-        $addMessageToThread = function (string $threadId) use ($userText) {
-            $resp = Http::withHeaders([
-                'Authorization' => "Bearer {$this->openAiKey}",
-                'Content-Type'  => 'application/json',
-                'OpenAI-Beta'   => 'assistants=v2',
-            ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
-                'role'    => 'user',
-                'content' => $userText,
-            ]);
+    // Helper to add a message to a thread (with logging)
+    $addMessageToThread = function (string $threadId) use ($userText) {
+        $resp = Http::withHeaders([
+            'Authorization' => "Bearer {$this->openAiKey}",
+            'Content-Type'  => 'application/json',
+            'OpenAI-Beta'   => 'assistants=v2',
+        ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
+            'role'    => 'user',
+            'content' => $userText,
+        ]);
 
-            Log::debug('Assistants: add message response', [
-                'thread_id' => $threadId,
-                'status'    => $resp->status(),
-                'ok'        => $resp->ok(),
-                'body'      => $resp->json(),
-            ]);
+        Log::debug('Assistants: add message response', [
+            'thread_id' => $threadId,
+            'status'    => $resp->status(),
+            'ok'        => $resp->ok(),
+            'body'      => $resp->json(),
+        ]);
 
-            return $resp;
-        };
+        return $resp;
+    };
 
-        // 0) Ensure we have a valid thread (recreate if stale)
+    // 0) Ensure we have a valid thread (recreate if stale)
+    $threadId = $this->getOrCreateThreadId($userNumber);
+    $addMsg   = $addMessageToThread($threadId);
+
+    if ($addMsg->status() === 404) {
+        // Thread likely invalidated or purged – recreate once
+        Log::warning('Assistants: thread 404, recreating', [
+            'thread_id'   => $threadId,
+            'user_number' => $userNumber,
+        ]);
+
+        Cache::forget($cacheKey);
         $threadId = $this->getOrCreateThreadId($userNumber);
-        $addMsg   = $addMessageToThread($threadId);
 
-        if ($addMsg->status() === 404) {
-            // Thread likely invalidated or purged – recreate once
-            Log::warning('Assistants: thread 404, recreating', [
-                'thread_id'   => $threadId,
-                'user_number' => $userNumber,
-            ]);
+        $addMsg = $addMessageToThread($threadId);
+    }
 
-            Cache::forget($cacheKey);
-            $threadId = $this->getOrCreateThreadId($userNumber);
+    if (!$addMsg->ok()) {
+        throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
+    }
 
-            $addMsg = $addMessageToThread($threadId);
-        }
+    // 1) Create a run (FORCE file_search + attach your vector store + tighten retrieval)
+    // Ensure you have set $this->vectorStoreId during your bootstrap (after uploading/ingesting files)
+    if (empty($this->vectorStoreId)) {
+        Log::error('Assistants: vector store id missing; file_search will not work as intended');
+    }
 
-        if (!$addMsg->ok()) {
-            throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
-        }
+    $runCreatePayload = [
+        'assistant_id' => $this->assistantId,
 
-        // 1) Create a run (FORCE file_search + attach your vector store + tighten retrieval)
-        // Ensure you have set $this->vectorStoreId during your bootstrap (after uploading/ingesting files)
-        if (empty($this->vectorStoreId)) {
-            Log::error('Assistants: vector store id missing; file_search will not work as intended');
-        }
+        // Force the assistant to use file_search (prevents free-wheeling answers)
+        'tool_choice'  => ['type' => 'file_search'],
 
-        $runCreatePayload = [
-            'assistant_id' => $this->assistantId,
-
-            // Force the assistant to use file_search (prevents free-wheeling answers)
-            'tool_choice'  => ['type' => 'file_search'],
-
-            // You can re-specify tools at run time to override ranking knobs
-            'tools' => [[
-                'type' => 'file_search',
-                'file_search' => [
-                    'max_num_results' => 8, // keep the context tight
-                    'ranking_options' => [
-                        'score_threshold' => 0.55, // ignore weak matches
-                        // 'ranker' => 'auto'
-                    ],
-                ],
-            ]],
-
-            // Attach your vector store(s) for this run
-            'tool_resources' => [
-                'file_search' => [
-                    'vector_store_ids' => array_filter([$this->vectorStoreId ?? null]),
+        // You can re-specify tools at run time to override ranking knobs
+        'tools' => [[
+            'type' => 'file_search',
+            'file_search' => [
+                'max_num_results' => 8, // keep the context tight
+                'ranking_options' => [
+                    'score_threshold' => 0.55, // ignore weak matches
+                    // 'ranker' => 'auto'
                 ],
             ],
+        ]],
 
-            // Make it less "creative"
-            'temperature' => 0,
+        // Attach your vector store(s) for this run
+        'tool_resources' => [
+            'file_search' => [
+                'vector_store_ids' => array_filter([$this->vectorStoreId ?? null]),
+            ],
+        ],
 
-            // (Optional) Strong guardrails to keep answers grounded
-            'instructions' => implode("\n", [
-                "You are a strict RAG bot.",
-                "Rules:",
-                "1) ALWAYS call the file_search tool before answering.",
-                "2) ONLY answer using retrieved passages; if nothing is relevant, say: \"I couldn’t find this in the knowledge base.\"",
-                "3) Keep answers concise and cite the retrieved doc names inline like [Doc: <filename>].",
-            ]),
-        ];
+        // Make it less "creative"
+        'temperature' => 0,
 
-        $run = Http::withHeaders([
+        // (Optional) Strong guardrails to keep answers grounded
+        'instructions' => implode("\n", [
+            "You are a strict RAG bot.",
+            "Rules:",
+            "1) ALWAYS call the file_search tool before answering.",
+            "2) ONLY answer using retrieved passages; if nothing is relevant, say: \"I couldn’t find this in the knowledge base.\"",
+            "3) Keep answers concise and cite the retrieved doc names inline like [Doc: <filename>].",
+        ]),
+    ];
+
+    $run = Http::withHeaders([
+        'Authorization' => "Bearer {$this->openAiKey}",
+        'Content-Type'  => 'application/json',
+        'OpenAI-Beta'   => 'assistants=v2',
+    ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", $runCreatePayload);
+
+    Log::debug('Assistants: run created', [
+        'thread_id' => $threadId,
+        'status'    => $run->status(),
+        'ok'        => $run->ok(),
+        'body'      => $run->json(),
+    ]);
+
+    if (!$run->ok()) {
+        throw new \RuntimeException('Failed to create run: ' . $run->body());
+    }
+
+    $runId = (string) data_get($run->json(), 'id');
+
+    // 2) Poll until completion with detailed state logging
+    $maxWaitSeconds = 45;
+    $sleepMs        = 600;
+    $elapsed        = 0;
+
+    while (true) {
+        usleep($sleepMs * 1000);
+        $elapsed += $sleepMs / 1000;
+
+        $statusResp = Http::withHeaders([
             'Authorization' => "Bearer {$this->openAiKey}",
             'Content-Type'  => 'application/json',
             'OpenAI-Beta'   => 'assistants=v2',
-        ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", $runCreatePayload);
+        ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
 
-        Log::debug('Assistants: run created', [
-            'thread_id' => $threadId,
-            'status'    => $run->status(),
-            'ok'        => $run->ok(),
-            'body'      => $run->json(),
-        ]);
-
-        if (!$run->ok()) {
-            throw new \RuntimeException('Failed to create run: ' . $run->body());
-        }
-
-        $runId = (string) data_get($run->json(), 'id');
-
-        // 2) Poll until completion with detailed state logging
-        $maxWaitSeconds = 45;
-        $sleepMs        = 600;
-        $elapsed        = 0;
-
-        while (true) {
-            usleep($sleepMs * 1000);
-            $elapsed += $sleepMs / 1000;
-
-            $statusResp = Http::withHeaders([
-                'Authorization' => "Bearer {$this->openAiKey}",
-                'Content-Type'  => 'application/json',
-                'OpenAI-Beta'   => 'assistants=v2',
-            ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
-
-            if (!$statusResp->ok()) {
-                Log::error('Assistants: failed to check run', [
-                    'thread_id' => $threadId,
-                    'run_id'    => $runId,
-                    'status'    => $statusResp->status(),
-                    'body'      => $statusResp->body(),
-                ]);
-                throw new \RuntimeException('Failed to check run: ' . $statusResp->body());
-            }
-
-            $statusJson = $statusResp->json();
-            $status     = (string) data_get($statusJson, 'status', 'queued');
-
-            Log::debug('Assistants: run status tick', [
+        if (!$statusResp->ok()) {
+            Log::error('Assistants: failed to check run', [
                 'thread_id' => $threadId,
                 'run_id'    => $runId,
-                'status'    => $status,
-                'elapsed_s' => $elapsed,
+                'status'    => $statusResp->status(),
+                'body'      => $statusResp->body(),
             ]);
-
-            if ($status === 'completed') {
-                break;
-            }
-
-            if ($status === 'requires_action') {
-                $toolCalls = data_get($statusJson, 'required_action.submit_tool_outputs.tool_calls', []);
-                Log::warning('Assistants: run requires tool action (not implemented)', [
-                    'thread_id'  => $threadId,
-                    'run_id'     => $runId,
-                    'tool_calls' => $toolCalls,
-                ]);
-                throw new \RuntimeException('Run requires tool action but no tool outputs were provided.');
-            }
-
-            if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
-                Log::error('Assistants: run terminal error', [
-                    'thread_id'  => $threadId,
-                    'run_id'     => $runId,
-                    'status'     => $status,
-                    'last_error' => data_get($statusJson, 'last_error', null),
-                    'full'       => $statusJson,
-                ]);
-                $lastError = data_get($statusJson, 'last_error.message') ?? 'unknown error';
-                throw new \RuntimeException("Run {$status}: {$lastError}");
-            }
-
-            if ($elapsed >= $maxWaitSeconds) {
-                Log::error('Assistants: run timed out', [
-                    'thread_id' => $threadId,
-                    'run_id'    => $runId,
-                    'last_seen' => $status,
-                ]);
-                throw new \RuntimeException('Run timed out waiting for completion.');
-            }
-
-            if ($sleepMs < 1500) $sleepMs += 150; // mild backoff
+            throw new \RuntimeException('Failed to check run: ' . $statusResp->body());
         }
 
-        // 2.1) OPTIONAL: verify that file_search was actually used (logs only)
-        try {
-            $stepsResp = Http::withHeaders([
-                'Authorization' => "Bearer {$this->openAiKey}",
-                'Content-Type'  => 'application/json',
-                'OpenAI-Beta'   => 'assistants=v2',
-            ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}/steps", [
-                'limit' => 20,
-            ]);
+        $statusJson = $statusResp->json();
+        $status     = (string) data_get($statusJson, 'status', 'queued');
 
-            $usedFileSearch = false;
-            if ($stepsResp->ok()) {
-                $steps = (array) data_get($stepsResp->json(), 'data', []);
-                foreach ($steps as $s) {
-                    $json = json_encode($s);
-                    if (is_string($json) && str_contains($json, '"file_search"')) {
-                        $usedFileSearch = true;
-                        break;
-                    }
-                }
-            }
+        Log::debug('Assistants: run status tick', [
+            'thread_id' => $threadId,
+            'run_id'    => $runId,
+            'status'    => $status,
+            'elapsed_s' => $elapsed,
+        ]);
 
-            Log::info('Assistants: verification file_search usage', [
-                'thread_id'        => $threadId,
-                'run_id'           => $runId,
-                'used_file_search' => $usedFileSearch,
-                'steps'            => $stepsResp->json(),
-            ]);
-        } catch (\Throwable $e) {
-            Log::warning('Assistants: failed to verify file_search usage', ['e' => $e->getMessage()]);
+        if ($status === 'completed') {
+            break;
         }
 
-        // 3) Fetch the latest assistant message (most recent first) + try to surface citations
-        $messagesResp = Http::withHeaders([
+        if ($status === 'requires_action') {
+            $toolCalls = data_get($statusJson, 'required_action.submit_tool_outputs.tool_calls', []);
+            Log::warning('Assistants: run requires tool action (not implemented)', [
+                'thread_id'  => $threadId,
+                'run_id'     => $runId,
+                'tool_calls' => $toolCalls,
+            ]);
+            throw new \RuntimeException('Run requires tool action but no tool outputs were provided.');
+        }
+
+        if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
+            Log::error('Assistants: run terminal error', [
+                'thread_id'  => $threadId,
+                'run_id'     => $runId,
+                'status'     => $status,
+                'last_error' => data_get($statusJson, 'last_error', null),
+                'full'       => $statusJson,
+            ]);
+            $lastError = data_get($statusJson, 'last_error.message') ?? 'unknown error';
+            throw new \RuntimeException("Run {$status}: {$lastError}");
+        }
+
+        if ($elapsed >= $maxWaitSeconds) {
+            Log::error('Assistants: run timed out', [
+                'thread_id' => $threadId,
+                'run_id'    => $runId,
+                'last_seen' => $status,
+            ]);
+            throw new \RuntimeException('Run timed out waiting for completion.');
+        }
+
+        if ($sleepMs < 1500) $sleepMs += 150; // mild backoff
+    }
+
+    // 2.1) OPTIONAL: verify that file_search was actually used (logs only)
+    try {
+        $stepsResp = Http::withHeaders([
             'Authorization' => "Bearer {$this->openAiKey}",
             'Content-Type'  => 'application/json',
             'OpenAI-Beta'   => 'assistants=v2',
-        ])->get("https://api.openai.com/v1/threads/{$threadId}/messages", [
-            'limit' => 5,
-            'order' => 'desc',
+        ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}/steps", [
+            'limit' => 20,
         ]);
 
-        Log::debug('Assistants: messages fetch', [
-            'thread_id' => $threadId,
-            'status'    => $messagesResp->status(),
-            'ok'        => $messagesResp->ok(),
-            'body'      => $messagesResp->json(),
-        ]);
-
-        if (!$messagesResp->ok()) {
-            throw new \RuntimeException('Failed to list messages: ' . $messagesResp->body());
-        }
-
-        $answerHtml = null;
-        $items = (array) data_get($messagesResp->json(), 'data', []);
-        foreach ($items as $msg) {
-            if (($msg['role'] ?? '') !== 'assistant') continue;
-
-            foreach (($msg['content'] ?? []) as $block) {
-                if (($block['type'] ?? '') !== 'text') continue;
-
-                $val = (string) data_get($block, 'text.value', '');
-                $anns = (array) data_get($block, 'text.annotations', []);
-
-                // Convert simple file citations to a readable suffix (optional, tweak as you like)
-                $citations = [];
-                foreach ($anns as $ann) {
-                    $type = $ann['type'] ?? '';
-                    if ($type === 'file_citation') {
-                        $fileId = data_get($ann, 'file_citation.file_id');
-                        $quote  = trim((string) data_get($ann, 'text', ''));
-                        if ($fileId) $citations[] = "[Source: {$fileId}]";
-                    }
-                }
-
-                if ($val !== '') {
-                    $answerHtml = $val . (count($citations) ? "<br><br><small>" . implode(' ', array_unique($citations)) . "</small>" : '');
-                    break 2;
+        $usedFileSearch = false;
+        if ($stepsResp->ok()) {
+            $steps = (array) data_get($stepsResp->json(), 'data', []);
+            foreach ($steps as $s) {
+                $json = json_encode($s);
+                if (is_string($json) && str_contains($json, '"file_search"')) {
+                    $usedFileSearch = true; break;
                 }
             }
         }
 
-        // Fallback (short, WhatsApp-friendly)
-        return $answerHtml ?: '<p>Thanks for your message — how can I help further?</p>';
+        Log::info('Assistants: verification file_search usage', [
+            'thread_id'        => $threadId,
+            'run_id'           => $runId,
+            'used_file_search' => $usedFileSearch,
+            'steps'            => $stepsResp->json(),
+        ]);
+    } catch (\Throwable $e) {
+        Log::warning('Assistants: failed to verify file_search usage', ['e' => $e->getMessage()]);
     }
+
+    // 3) Fetch the latest assistant message (most recent first) + try to surface citations
+    $messagesResp = Http::withHeaders([
+        'Authorization' => "Bearer {$this->openAiKey}",
+        'Content-Type'  => 'application/json',
+        'OpenAI-Beta'   => 'assistants=v2',
+    ])->get("https://api.openai.com/v1/threads/{$threadId}/messages", [
+        'limit' => 5,
+        'order' => 'desc',
+    ]);
+
+    Log::debug('Assistants: messages fetch', [
+        'thread_id' => $threadId,
+        'status'    => $messagesResp->status(),
+        'ok'        => $messagesResp->ok(),
+        'body'      => $messagesResp->json(),
+    ]);
+
+    if (!$messagesResp->ok()) {
+        throw new \RuntimeException('Failed to list messages: ' . $messagesResp->body());
+    }
+
+    $answerHtml = null;
+    $items = (array) data_get($messagesResp->json(), 'data', []);
+    foreach ($items as $msg) {
+        if (($msg['role'] ?? '') !== 'assistant') continue;
+
+        foreach (($msg['content'] ?? []) as $block) {
+            if (($block['type'] ?? '') !== 'text') continue;
+
+            $val = (string) data_get($block, 'text.value', '');
+            $anns = (array) data_get($block, 'text.annotations', []);
+
+            // Convert simple file citations to a readable suffix (optional, tweak as you like)
+            $citations = [];
+            foreach ($anns as $ann) {
+                $type = $ann['type'] ?? '';
+                if ($type === 'file_citation') {
+                    $fileId = data_get($ann, 'file_citation.file_id');
+                    $quote  = trim((string) data_get($ann, 'text', ''));
+                    if ($fileId) $citations[] = "[Source: {$fileId}]";
+                }
+            }
+
+            if ($val !== '') {
+                $answerHtml = $val . (count($citations) ? "<br><br><small>" . implode(' ', array_unique($citations)) . "</small>" : '');
+                break 2;
+            }
+        }
+    }
+
+    // Fallback (short, WhatsApp-friendly)
+    return $answerHtml ?: '<p>Thanks for your message — how can I help further?</p>';
+}
 
 
 
