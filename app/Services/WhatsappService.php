@@ -12,25 +12,42 @@ use Illuminate\Support\Facades\Cache;
 
 class WhatsappService
 {
-    protected Client $twilio;
-    protected string $whatsappFrom;
-    protected string $openAiKey;
+    /**
+     * @var Client
+     */
+    protected $twilio;
 
-    /** Your Assistant ID (Flettons Customer Services) as configured in OpenAI. */
+    /**
+     * @var string
+     */
+    protected $whatsappFrom;
+
+    /**
+     * @var string
+     */
+    protected $openAiKey;
+
+    /**
+     * Your Assistant ID (Flettons Customer Services)
+     * as configured in OpenAI.
+     */
     protected string $assistantId = 'asst_PY5ZXiliSAQjA7scJ8mTdR66';
 
     public function __construct()
     {
+        // load Twilio creds from config/services.php → .env
         $this->twilio = new Client(
             config('services.twilio.sid'),
             config('services.twilio.token')
         );
 
-        $this->whatsappFrom = (string) config('services.twilio.whatsapp_from');
-        $this->openAiKey    = (string) config('services.openai.key');
+        $this->whatsappFrom = config('services.twilio.whatsapp_from');
+
+        // load OpenAI key from config/services.php → .env
+        $this->openAiKey = config('services.openai.key');
     }
 
-    // send first template message (unchanged)
+    // send first template message
     public function sendWhatsAppMessage($request)
     {
         $recipientNumber = 'whatsapp:+923096176606';
@@ -38,15 +55,17 @@ class WhatsappService
         $message         = 'Hello from Programming Experience';
         $contentSid      = 'HX1ae7bac573156bfd28607c4d45fb2957';
 
-        $twilio       = $this->twilio;
-        $proxyAddress = $this->whatsappFrom;
+        $twilio       = $this->twilio;          // \Twilio\Rest\Client
+        $proxyAddress = $this->whatsappFrom;    // e.g. 'whatsapp:+14155238886'
 
         try {
+            // 0) Try to find an existing conversation for this participant (and proxy)
             $existingSid = null;
             $pcs = $twilio->conversations->v1->participantConversations
-                ->read(['address' => $recipientNumber], 20);
+                ->read(['address' => $recipientNumber], 20); // Twilio SDK url-encodes the '+'
 
             foreach ($pcs as $pc) {
+                // Defensive: make sure we match the same proxy/sender
                 $binding = $pc->participantMessagingBinding ?? null;
                 if ($binding && isset($binding['proxy_address']) && $binding['proxy_address'] === $proxyAddress) {
                     $existingSid = $pc->conversationSid;
@@ -55,34 +74,39 @@ class WhatsappService
             }
 
             if (!$existingSid) {
+                // 1) Create a new conversation
                 $conversation = $twilio->conversations->v1->conversations
                     ->create(['friendlyName' => $friendlyName]);
 
                 $existingSid = $conversation->sid;
 
+                // 2) Add participant (may 409 if a race condition; ignore if so)
                 try {
                     $twilio->conversations->v1->conversations($existingSid)
                         ->participants
                         ->create([
-                            'messagingBindingAddress'      => $recipientNumber,
-                            'messagingBindingProxyAddress' => $proxyAddress,
+                            'messagingBindingAddress'       => $recipientNumber,
+                            'messagingBindingProxyAddress'  => $proxyAddress,
                         ]);
                 } catch (\Twilio\Exceptions\RestException $e) {
+                    // 50437/50416 → participant or binding already exists; proceed
                     if ($e->getStatusCode() != 409) {
                         throw $e;
                     }
                 }
             }
 
+            // 3) Send your (template) message on the located/created conversation
             $msg = $twilio->conversations->v1->conversations($existingSid)
                 ->messages
                 ->create([
                     'author'           => 'system',
-                    'body'             => $message,
-                    'contentSid'       => $contentSid,
+                    'body'             => $message,        // optional if you rely on contentSid only
+                    'contentSid'       => $contentSid,     // WhatsApp template via Content API
                     'contentVariables' => json_encode(["1" => "Simon", "2" => "habib"]),
                 ]);
 
+            // 4) Persist for next time so you can jump straight to sending
             ChatControll::updateOrCreate(
                 ['sid' => $existingSid],
                 ['contact' => $friendlyName, 'auto_reply' => true]
@@ -94,16 +118,23 @@ class WhatsappService
                 'message_sid'      => $msg->sid,
             ]);
         } catch (\Twilio\Exceptions\RestException $e) {
+            // Fallback: if Twilio already told us the conversation sid in the 409 message, you can parse it and retry send
             return response()->json(['error' => $e->getMessage()], 500);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
+
+    /**
+     * Send a custom conversation message
+     */
     public function sendCustomMessage(string $conversationSid, string $message)
     {
         try {
-            $msg = $this->twilio->conversations->v1
+            $msg = $this->twilio
+                ->conversations
+                ->v1
                 ->conversations($conversationSid)
                 ->messages
                 ->create([
@@ -121,28 +152,38 @@ class WhatsappService
         }
     }
 
+    /**
+     * Get all conversations
+     */
     public function getConversations(): array
     {
         try {
-            $convs = $this->twilio->conversations->v1->conversations->read();
+            $convs = $this->twilio
+                ->conversations
+                ->v1
+                ->conversations
+                ->read();
 
             return array_map(fn($c) => [
                 'sid'           => $c->sid,
                 'friendly_name' => $c->friendlyName,
                 'state'         => $c->state,
-                'date_created'  => $c->dateCreated ? $c->dateCreated->format('Y-m-d H:i:s') : null,
+                'date_created'  => $c->dateCreated->format('Y-m-d H:i:s'),
             ], $convs);
         } catch (\Exception $e) {
-            // >>> CHANGED: return empty list instead of error array (callers expect an array of conversations)
-            Log::warning('getConversations failed: '.$e->getMessage());
-            return [];
+            return ['error' => $e->getMessage()];
         }
     }
 
+    /**
+     * Get messages for one conversation
+     */
     public function getMessages(string $conversationSid): array
     {
         try {
-            $msgs = $this->twilio->conversations->v1
+            $msgs = $this->twilio
+                ->conversations
+                ->v1
                 ->conversations($conversationSid)
                 ->messages
                 ->read();
@@ -151,14 +192,12 @@ class WhatsappService
                 'sid'          => $m->sid,
                 'author'       => $m->author,
                 'body'         => $m->body,
-                'date_created' => $m->dateCreated ? $m->dateCreated->format('Y-m-d H:i:s') : null,
+                'date_created' => $m->dateCreated->format('Y-m-d H:i:s'),
             ], $msgs);
         } catch (\Exception $e) {
             return ['error' => $e->getMessage()];
         }
     }
-
-   
 
     /**
      * Delete a conversation
@@ -204,46 +243,12 @@ class WhatsappService
             }
         }
 
-        // Emit user message to your UI (even if conversation not found yet)
+        // Emit user message to your UI
         event(new MessageSent($userText, $conversationSid, 'user'));
 
-        // If no conversation exists yet, create one now so we can reply back reliably
-        if (!$conversationSid) {
-            try {
-                $conversation = $this->twilio->conversations->v1->conversations
-                    ->create(['friendlyName' => $userNumber]);
-                $conversationSid = $conversation->sid;
-
-                // Ensure participant is added
-                try {
-                    $this->twilio->conversations->v1->conversations($conversationSid)
-                        ->participants
-                        ->create([
-                            'messagingBindingAddress'      => 'whatsapp:'.$userNumber,
-                            'messagingBindingProxyAddress' => $this->whatsappFrom,
-                        ]);
-                } catch (\Twilio\Exceptions\RestException $e) {
-                    if ($e->getStatusCode() != 409) {
-                        throw $e;
-                    }
-                }
-
-                // default ChatControll row
-                ChatControll::updateOrCreate(
-                    ['sid' => $conversationSid],
-                    ['contact' => $userNumber, 'auto_reply' => true]
-                );
-            } catch (\Throwable $e) {
-                Log::error('Failed to ensure conversation: '.$e->getMessage());
-            }
-        }
-
-        // If auto reply is off, do not call OpenAI
-        $chatControll = $conversationSid
-            ? ChatControll::where('sid', $conversationSid)->first()
-            : null;
-
-        if ($chatControll && $chatControll->auto_reply === false) {
+        // if auto reply is off it will not call gpt api
+        $chatControll = ChatControll::where('sid', $conversationSid)->first();
+        if (!$chatControll->auto_reply) {
             return response()->noContent();
         }
 
@@ -251,20 +256,13 @@ class WhatsappService
         try {
             $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText);
             $replyText = $this->htmlToWhatsappText($replyHtml);
-
+            // $replyText = $replyHtml;
             // Send reply into your chat & WhatsApp
-            if ($conversationSid) {
-                $this->sendCustomMessage($conversationSid, $replyText);
-            }
+            $this->sendCustomMessage($conversationSid, $replyText);
             event(new MessageSent($replyText, $conversationSid, 'admin'));
         } catch (\Throwable $e) {
             Log::error('Assistant error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            // Soft fallback to avoid loops
-            $fallback = 'Thanks for your message — one moment while I check that.';
-            if ($conversationSid) {
-                $this->sendCustomMessage($conversationSid, $fallback);
-            }
-            event(new MessageSent($fallback, $conversationSid, 'admin'));
+            $replyText = 'Please wait';
         }
 
         return response()->noContent();
@@ -295,8 +293,6 @@ class WhatsappService
 
     /**
      * Run the Assistant on the user’s thread and return the latest assistant HTML.
-     * IMPORTANT: We let the configured Assistant’s own system prompt & tools drive behaviour.
-     * We do NOT override with per-run "instructions".
      */
     protected function runAssistantAndGetReply(string $userNumber, string $userText): string
     {
@@ -310,21 +306,26 @@ class WhatsappService
         ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
             'role'    => 'user',
             'content' => $userText,
+            // If you prefer strict v2 shape, you can use:
+            // 'content' => [
+            //   [ 'type' => 'input_text', 'text' => $userText ],
+            // ],
         ]);
 
         if (!$addMsg->ok()) {
             throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
         }
 
-        // 2) Create a run for your Assistant — no per-run instructions
+        // 2) Create a run for your Assistant — now WITHOUT inline instructions
         $run = Http::withHeaders([
             'Authorization' => "Bearer {$this->openAiKey}",
             'Content-Type'  => 'application/json',
             'OpenAI-Beta'   => 'assistants=v2',
         ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", [
-            'assistant_id'          => $this->assistantId,
-            'max_completion_tokens' => 200,   // small but safe
-            'max_prompt_tokens'     => 4000,  // allow thread context
+            'assistant_id'         => $this->assistantId,
+            'max_completion_tokens' => 120,
+            'max_prompt_tokens'    => 2000,
+            // no "instructions" here — the dashboard’s settings will apply
         ]);
 
         if (!$run->ok()) {
@@ -356,7 +357,6 @@ class WhatsappService
 
             if ($status === 'completed') break;
 
-            // (Optional) If your assistant uses tools requiring action, you could handle here.
             if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
                 $lastError = data_get($statusResp->json(), 'last_error.message') ?? 'unknown error';
                 throw new \RuntimeException("Run {$status}: {$lastError}");
@@ -375,7 +375,7 @@ class WhatsappService
             'Content-Type'  => 'application/json',
             'OpenAI-Beta'   => 'assistants=v2',
         ])->get("https://api.openai.com/v1/threads/{$threadId}/messages", [
-            'limit' => 10,
+            'limit' => 5,
             'order' => 'desc',
         ]);
 
@@ -386,15 +386,9 @@ class WhatsappService
         $items = (array) data_get($messagesResp->json(), 'data', []);
         foreach ($items as $msg) {
             if (($msg['role'] ?? '') !== 'assistant') continue;
-            foreach ((array) ($msg['content'] ?? []) as $block) {
-                // Assistants v2 "text" block
+            foreach (($msg['content'] ?? []) as $block) {
                 if (($block['type'] ?? '') === 'text') {
                     $val = (string) data_get($block, 'text.value', '');
-                    if ($val !== '') return $val;
-                }
-                // Some SDKs/versions surface "output_text"
-                if (($block['type'] ?? '') === 'output_text') {
-                    $val = (string) data_get($block, 'output_text', '');
                     if ($val !== '') return $val;
                 }
             }
@@ -404,47 +398,40 @@ class WhatsappService
         return '<p>Thanks for your message — how can I help further?</p>';
     }
 
-    /**
-     * Convert simple HTML to WhatsApp-friendly text.
-     * - Preserves paragraphs and simple lists
-     * - Replaces <a> with its href
-     */
+
+
+    // In WhatsappService
+
     protected function htmlToWhatsappText(string $html): string
     {
-        $text = $html;
+        // 1) Normalise <br> and paragraph breaks to newlines
+        $normalized = preg_replace('/<\s*br\s*\/?>/i', "\n", $html);
+        $normalized = preg_replace('/<\/\s*p\s*>/i', "\n\n", $normalized);
 
-        // Normalise <br> and paragraph endings to newlines
-        $text = preg_replace('/<\s*br\s*\/?>/i', "\n", $text);
-        $text = preg_replace('/<\/\s*p\s*>/i', "\n\n", $text);
-
-        // Convert <li> to "- " lines
-        $text = preg_replace('/<\s*li\s*>/i', "- ", $text);
-        $text = preg_replace('/<\/\s*li\s*>/i', "\n", $text);
-        // End of lists insert a blank line
-        $text = preg_replace('/<\/\s*ul\s*>/i', "\n", $text);
-        $text = preg_replace('/<\/\s*ol\s*>/i', "\n", $text);
-
-        // Replace anchors with just their href (prefer URL over anchor text)
-        $text = preg_replace_callback('~<a\b[^>]*>(.*?)</a>~is', function ($m) {
+        // 2) Replace anchors with just their href (remove anchor text)
+        //    e.g. <a href="https://x.com">Click here</a> => https://x.com
+        $normalized = preg_replace_callback('~<a\b[^>]*>(.*?)</a>~is', function ($m) {
             $tag = $m[0];
             if (preg_match('~href\s*=\s*([\'"])(.*?)\1~i', $tag, $hrefMatch)) {
-                return $hrefMatch[2];
+                return $hrefMatch[2]; // keep only the URL
             }
+            // No href found: drop the tag but keep inner text as last resort
             return isset($m[1]) ? strip_tags($m[1]) : '';
-        }, $text);
+        }, $normalized);
 
-        // Remove all remaining tags
-        $text = strip_tags($text);
+        // 3) Remove all remaining tags
+        $text = strip_tags($normalized);
 
-        // Decode HTML entities
+        // 4) Decode entities (&nbsp; → space, etc.)
         $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
-        // Tidy whitespace
-        $text = preg_replace("/\r\n?/", "\n", $text);   // CRLF → LF
-        $text = preg_replace("/\n{3,}/", "\n\n", $text); // collapse 3+ NL to 2
-        $text = preg_replace('/[ \t]{2,}/', ' ', $text); // collapse runs of spaces/tabs
-        $text = trim($text);
+        // 5) Trim & tidy whitespace/newlines
+        //    - Collapse 3+ newlines to 2
+        //    - Convert Windows/Mac line endings if any slipped through
+        $text = preg_replace("/\r\n?/", "\n", $text);
+        $text = preg_replace("/\n{3,}/", "\n\n", $text);
+        $text = preg_replace('/[ \t]{2,}/', ' ', $text);
 
-        return $text;
+        return trim($text);
     }
 }
