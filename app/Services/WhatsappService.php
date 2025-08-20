@@ -355,7 +355,7 @@ class WhatsappService
             'temperature'  => 0,
             'instructions' => implode("\n", [
                 "You are a strict retrieval bot for Flettons.",
-                "Rules:",
+                "Rules:  it is a assistant designed to provide customer services within Flettons Surveyors",
                 "1) ALWAYS search the attached knowledge base (file_search) first.",
                 "2) ONLY answer using passages retrieved from the KB that directly match the user's question.",
                 "3) If nothing relevant is found, reply exactly: \"I couldn’t find this in the knowledge base.\"",
