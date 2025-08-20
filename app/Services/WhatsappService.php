@@ -353,13 +353,6 @@ class WhatsappService
         $runCreatePayload = [
             'assistant_id' => $this->assistantId,
             'temperature'  => 0,
-            'instructions' => implode("\n", [
-                "You are a strict RAG bot.",
-                "Rules:",
-                "1) ALWAYS use the file_search tool first on the attached knowledge base.",
-                "2) ONLY answer using retrieved passages; if nothing relevant is found, reply exactly: \"I couldn’t find this in the knowledge base.\"",
-                "3) Keep answers concise and cite the retrieved doc names inline like [Doc: <filename>].",
-            ]),
             'tool_resources' => [
                 'file_search' => [
                     'vector_store_ids' => [$vectorStoreId],
