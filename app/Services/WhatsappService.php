@@ -297,7 +297,7 @@ class WhatsappService
     protected function runAssistantAndGetReply(string $userNumber, string $userText): string
     {
         $cacheKey = "flettons:assistant_thread:{$userNumber}";
-        $vectorStoreId = 'vs_68a475c65ef48191bc346af37caebe76'; // <-- your vector store
+        $vectorStoreId = 'vs_68a475c65ef48191bc346af37caebe76';
 
         if (empty($this->assistantId)) {
             throw new \RuntimeException('assistantId missing');
@@ -349,16 +349,25 @@ class WhatsappService
             throw new \RuntimeException('Failed to add message (status ' . $addMsg->status() . ', req_id: ' . $addMsg->header('x-request-id') . '): ' . $addMsg->body());
         }
 
-        // 1) Create a run (attach your vector store + force file_search + strict instructions)
+        // 1) Create a run (attach vector store, force file_search, and add strict instructions)
         $runCreatePayload = [
             'assistant_id' => $this->assistantId,
             'temperature'  => 0,
+            'instructions' => implode("\n", [
+                "You are a strict retrieval bot for Flettons.",
+                "Rules:",
+                "1) ALWAYS search the attached knowledge base (file_search) first.",
+                "2) ONLY answer using passages retrieved from the KB that directly match the user's question.",
+                "3) If nothing relevant is found, reply exactly: \"I couldn’t find this in the knowledge base.\"",
+                "4) Be concise. No generic marketing/booking lines unless the user explicitly asks.",
+                "5) Cite source filenames inline like [Doc: <filename>] but do not include raw engine tokens.",
+            ]),
             'tool_resources' => [
                 'file_search' => [
                     'vector_store_ids' => [$vectorStoreId],
                 ],
             ],
-            'tool_choice' => ['type' => 'file_search'], // force the tool since we attached resources
+            'tool_choice' => ['type' => 'file_search'],
         ];
 
         // Create run with targeted retries on 5xx
@@ -398,7 +407,7 @@ class WhatsappService
             throw new \RuntimeException('Run created but no id returned (req_id: ' . $run->header('x-request-id') . ')');
         }
 
-        // 2) Poll until completion with detailed state logging
+        // 2) Poll until completion
         $maxWaitSeconds = 45;
         $sleepMs        = 600;
         $elapsed        = 0;
@@ -421,8 +430,7 @@ class WhatsappService
                 throw new \RuntimeException('Failed to check run (status ' . $statusResp->status() . ', req_id: ' . $statusResp->header('x-request-id') . '): ' . $statusResp->body());
             }
 
-            $statusJson = $statusResp->json();
-            $status     = (string) data_get($statusJson, 'status', 'queued');
+            $status = (string) data_get($statusResp->json(), 'status', 'queued');
 
             Log::debug('Assistants: run status tick', [
                 'thread_id' => $threadId,
@@ -434,7 +442,7 @@ class WhatsappService
             if ($status === 'completed') break;
 
             if ($status === 'requires_action') {
-                $toolCalls = data_get($statusJson, 'required_action.submit_tool_outputs.tool_calls', []);
+                $toolCalls = data_get($statusResp->json(), 'required_action.submit_tool_outputs.tool_calls', []);
                 Log::warning('Assistants: run requires tool action (not implemented)', [
                     'thread_id'  => $threadId,
                     'run_id'     => $runId,
@@ -444,14 +452,14 @@ class WhatsappService
             }
 
             if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
+                $lastError = data_get($statusResp->json(), 'last_error.message') ?? 'unknown error';
                 Log::error('Assistants: run terminal error', [
                     'thread_id'  => $threadId,
                     'run_id'     => $runId,
                     'status'     => $status,
-                    'last_error' => data_get($statusJson, 'last_error', null),
-                    'full'       => $statusJson,
+                    'last_error' => $lastError,
+                    'full'       => $statusResp->json(),
                 ]);
-                $lastError = data_get($statusJson, 'last_error.message') ?? 'unknown error';
                 throw new \RuntimeException("Run {$status}: {$lastError}");
             }
 
@@ -464,10 +472,10 @@ class WhatsappService
                 throw new \RuntimeException('Run timed out waiting for completion.');
             }
 
-            if ($sleepMs < 1500) $sleepMs += 150; // mild backoff
+            if ($sleepMs < 1500) $sleepMs += 150;
         }
 
-        // 3) Fetch the latest assistant message (most recent first)
+        // 3) Fetch the latest assistant message and strip engine-style citations before sending to WhatsApp
         $messagesResp = Http::withHeaders($headers)
             ->get("https://api.openai.com/v1/threads/{$threadId}/messages", [
                 'limit' => 5,
@@ -492,12 +500,16 @@ class WhatsappService
             foreach (($msg['content'] ?? []) as $block) {
                 if (($block['type'] ?? '') === 'text') {
                     $val = (string) data_get($block, 'text.value', '');
-                    if ($val !== '') return $val;
+                    if ($val !== '') {
+                        // Remove raw engine-style citations like:
+                        $val = preg_replace('/\x{3010}.*?\x{3011}/u', '', $val); // strip anything between 【 and 】
+                        // Optional: keep our friendlier citation style if you included [Doc: <filename>] in instructions.
+                        return trim($val);
+                    }
                 }
             }
         }
 
-        // Fallback (short, WhatsApp-friendly)
         return '<p>Thanks for your message — how can I help further?</p>';
     }
 
