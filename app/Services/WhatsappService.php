@@ -355,7 +355,8 @@ class WhatsappService
             'temperature'  => 0,
             'instructions' => implode("\n", [
                 "You are a strict retrieval bot for Flettons.",
-                "Rules:  it is a assistant designed to provide customer services within Flettons Surveyors",
+                "Rules: it is an assistant designed to provide customer services within Flettons Surveyors.",
+                "Output must be valid json with a single text field called 'answer'.",
                 "1) ALWAYS search the attached knowledge base (file_search) first.",
                 "2) ONLY answer using passages retrieved from the KB that directly match the user's question.",
                 "3) If nothing relevant is found, reply exactly: \"I couldn’t find this in the knowledge base.\"",
@@ -369,6 +370,7 @@ class WhatsappService
             ],
             'tool_choice' => ['type' => 'file_search'],
         ];
+
 
         // Create run with targeted retries on 5xx
         $maxAttempts = 3;
