@@ -359,9 +359,7 @@ class WhatsappService
      */
     protected function runAssistantAndGetReply(string $userNumber, string $userText): string
     {
-        // Load contact/profile from DB (by phone)
-        $rec = ChatControll::where('contact', $userNumber)->first();
-
+    
         // Get (or create) the OpenAI thread id using ONLY getOrCreateThreadId
         $threadId = $this->getOrCreateThreadId($userNumber);
 
