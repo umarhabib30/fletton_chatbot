@@ -16,6 +16,13 @@ return new class extends Migration
             $table->string('contact')->nullable();
             $table->string('sid')->nullable();
             $table->boolean('auto_reply')->default(true);
+            $table->string('first_name')->nullable();
+            $table->string('last_name')->nullable();
+            $table->string('email')->nullable();
+            $table->string('address')->nullable();
+            $table->string('postal_code')->nullable();
+            $table->string('assistant_thread_id')->nullable()->index();
+            $table->json('assistant_metadata')->nullable();
             $table->timestamps();
         });
     }

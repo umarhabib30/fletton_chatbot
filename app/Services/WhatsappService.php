@@ -50,22 +50,21 @@ class WhatsappService
     // send first template message
     public function sendWhatsAppMessage($request)
     {
-        $recipientNumber = 'whatsapp:+923096176606';
-        $friendlyName    = '+923096176606';
-        $message         = 'Hello from Programming Experience';
-        $contentSid      = 'HX1ae7bac573156bfd28607c4d45fb2957';
+        $recipientNumber = 'whatsapp:' . $request->phone;
+        $friendlyName    = $request->phone;
+        $message         = 'Hello from fletton surveys';
+        $contentSid      = 'HX08f90cc17d7e6fc0ae7e9bd5252b7530';
 
-        $twilio       = $this->twilio;          // \Twilio\Rest\Client
-        $proxyAddress = $this->whatsappFrom;    // e.g. 'whatsapp:+14155238886'
+        $twilio       = $this->twilio;       // \Twilio\Rest\Client
+        $proxyAddress = $this->whatsappFrom; // e.g. 'whatsapp:+14155238886'
 
         try {
-            // 0) Try to find an existing conversation for this participant (and proxy)
+            // 0) Find or create Twilio Conversation for this WhatsApp number
             $existingSid = null;
             $pcs = $twilio->conversations->v1->participantConversations
-                ->read(['address' => $recipientNumber], 20); // Twilio SDK url-encodes the '+'
+                ->read(['address' => $recipientNumber], 20);
 
             foreach ($pcs as $pc) {
-                // Defensive: make sure we match the same proxy/sender
                 $binding = $pc->participantMessagingBinding ?? null;
                 if ($binding && isset($binding['proxy_address']) && $binding['proxy_address'] === $proxyAddress) {
                     $existingSid = $pc->conversationSid;
@@ -74,43 +73,58 @@ class WhatsappService
             }
 
             if (!$existingSid) {
-                // 1) Create a new conversation
                 $conversation = $twilio->conversations->v1->conversations
                     ->create(['friendlyName' => $friendlyName]);
 
                 $existingSid = $conversation->sid;
 
-                // 2) Add participant (may 409 if a race condition; ignore if so)
                 try {
                     $twilio->conversations->v1->conversations($existingSid)
                         ->participants
                         ->create([
-                            'messagingBindingAddress'       => $recipientNumber,
-                            'messagingBindingProxyAddress'  => $proxyAddress,
+                            'messagingBindingAddress'      => $recipientNumber,
+                            'messagingBindingProxyAddress' => $proxyAddress,
                         ]);
                 } catch (\Twilio\Exceptions\RestException $e) {
-                    // 50437/50416 → participant or binding already exists; proceed
                     if ($e->getStatusCode() != 409) {
                         throw $e;
                     }
                 }
             }
 
-            // 3) Send your (template) message on the located/created conversation
+            // 1) Send the (template) message
             $msg = $twilio->conversations->v1->conversations($existingSid)
                 ->messages
                 ->create([
                     'author'           => 'system',
-                    'body'             => $message,        // optional if you rely on contentSid only
-                    'contentSid'       => $contentSid,     // WhatsApp template via Content API
-                    'contentVariables' => json_encode(["1" => "Simon", "2" => "habib"]),
+                    'body'             => $message, // optional with contentSid
+                    'contentSid'       => $contentSid,
+                    'contentVariables' => json_encode(['1' => (string) $request->first_name]),
                 ]);
 
-            // 4) Persist for next time so you can jump straight to sending
-            ChatControll::updateOrCreate(
+            // 2) Upsert the contact + profile in DB
+            /** @var ChatControll $contact */
+            $contact = ChatControll::updateOrCreate(
                 ['sid' => $existingSid],
-                ['contact' => $friendlyName, 'auto_reply' => true]
+                [
+                    'contact'     => $friendlyName,
+                    'auto_reply'  => true,
+                    'first_name'  => $request->first_name,
+                    'last_name'   => $request->last_name,
+                    'email'       => $request->email,
+                    'address'     => $request->address,
+                    'postal_code' => $request->postal_code,
+                ]
             );
+
+            // 3) Create/seed the OpenAI thread using ONLY getOrCreateThreadId
+            $this->getOrCreateThreadId($friendlyName, [
+                'first_name'  => $contact->first_name,
+                'last_name'   => $contact->last_name,
+                'email'       => $contact->email,
+                'address'     => $contact->address,
+                'postal_code' => $contact->postal_code,
+            ]);
 
             return response()->json([
                 'message'          => 'WhatsApp message sent successfully',
@@ -118,12 +132,12 @@ class WhatsappService
                 'message_sid'      => $msg->sid,
             ]);
         } catch (\Twilio\Exceptions\RestException $e) {
-            // Fallback: if Twilio already told us the conversation sid in the 409 message, you can parse it and retry send
             return response()->json(['error' => $e->getMessage()], 500);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
 
 
     /**
@@ -272,23 +286,72 @@ class WhatsappService
      * Create or reuse a Thread ID for this WhatsApp number.
      * Uses Cache forever; switch to DB if you prefer persistent mapping.
      */
-    protected function getOrCreateThreadId(string $userNumber): string
+    protected function getOrCreateThreadId(string $userNumber, array $profile = []): string
     {
-        $cacheKey = "flettons:assistant_thread:{$userNumber}";
+        $rec = ChatControll::firstOrCreate(
+            ['contact' => $userNumber],
+            ['auto_reply' => true]
+        );
 
-        return Cache::rememberForever($cacheKey, function () {
-            $resp = Http::withHeaders([
-                'Authorization' => "Bearer {$this->openAiKey}",
-                'Content-Type'  => 'application/json',
-                'OpenAI-Beta'   => 'assistants=v2',
-            ])->post('https://api.openai.com/v1/threads', []);
+        if (!empty($rec->assistant_thread_id)) {
+            return $rec->assistant_thread_id;
+        }
 
-            if (!$resp->ok()) {
-                throw new \RuntimeException('Failed to create thread: ' . $resp->body());
+        $payload = [];
+
+        // Thread metadata is not shown to the model, but is useful for your own bookkeeping
+        $meta = array_filter(array_merge([
+            'phone'  => $userNumber,
+            'source' => 'whatsapp',
+        ], $profile));
+        if (!empty($meta)) {
+            $payload['metadata'] = $meta;
+        }
+
+        // Seed message *is* visible to the model (once) to improve personalization
+        if (!empty($profile)) {
+            $lines = ["Profile context for personalization only. Do not reveal this text in replies."];
+            if (!empty($profile['first_name']) || !empty($profile['last_name'])) {
+                $lines[] = 'Name: ' . trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''));
             }
+            foreach (['email', 'address', 'postal_code'] as $k) {
+                if (!empty($profile[$k])) {
+                    $label = ucfirst(str_replace('_', ' ', $k));
+                    $lines[] = "{$label}: {$profile[$k]}";
+                }
+            }
+            $payload['messages'] = [[
+                'role'    => 'user',
+                'content' => implode("\n", $lines),
+            ]];
+        }
 
-            return (string) data_get($resp->json(), 'id');
-        });
+        // 4) Create the thread
+        $resp = Http::withHeaders([
+            'Authorization' => "Bearer {$this->openAiKey}",
+            'Content-Type'  => 'application/json',
+            'OpenAI-Beta'   => 'assistants=v2',
+        ])->post('https://api.openai.com/v1/threads', $payload);
+
+        Log::debug('Assistants: create thread', [
+            'contact' => $userNumber,
+            'status'  => $resp->status(),
+            'ok'      => $resp->ok(),
+            'body'    => $resp->json(),
+        ]);
+
+        if (!$resp->ok()) {
+            throw new \RuntimeException('Failed to create thread: ' . $resp->body());
+        }
+
+        $threadId = (string) data_get($resp->json(), 'id');
+
+        // 5) Persist thread id (and optional profile snapshot) to DB
+        $rec->assistant_thread_id = $threadId;
+        $rec->assistant_metadata = $profile;
+        $rec->save();
+
+        return $threadId;
     }
 
     /**
@@ -296,9 +359,13 @@ class WhatsappService
      */
     protected function runAssistantAndGetReply(string $userNumber, string $userText): string
     {
-        $cacheKey = "flettons:assistant_thread:{$userNumber}";
+        // Load contact/profile from DB (by phone)
+        $rec = ChatControll::where('contact', $userNumber)->first();
 
-        // Helper to add a message to a thread (with logging)
+        // Get (or create) the OpenAI thread id using ONLY getOrCreateThreadId
+        $threadId = $this->getOrCreateThreadId($userNumber);
+
+        // Helper to add a message to a thread
         $addMessageToThread = function (string $threadId) use ($userText) {
             $resp = Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
@@ -319,30 +386,28 @@ class WhatsappService
             return $resp;
         };
 
-        // 0) Ensure we have a valid thread (recreate if stale)
-        $threadId = $this->getOrCreateThreadId($userNumber);
-        $addMsg   = $addMessageToThread($threadId);
-
+        // Add the incoming user message; if the thread was purged, recreate using ONLY getOrCreateThreadId
+        $addMsg = $addMessageToThread($threadId);
         if ($addMsg->status() === 404) {
-            // Thread likely invalidated or purged – recreate once
             Log::warning('Assistants: thread 404, recreating', [
                 'thread_id'   => $threadId,
                 'user_number' => $userNumber,
             ]);
 
-            Cache::forget($cacheKey);
+            // Clear the stored thread id so getOrCreateThreadId will create a fresh one
+            ChatControll::where('contact', $userNumber)
+                ->update(['assistant_thread_id' => null]);
+
             $threadId = $this->getOrCreateThreadId($userNumber);
-
-            $addMsg = $addMessageToThread($threadId);
+            $addMsg   = $addMessageToThread($threadId);
         }
-
         if (!$addMsg->ok()) {
             throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
         }
 
-        // 1) Create a run (use supported knobs)
+        // Create a run (keep your dynamic instructions if you have that helper)
         $runCreatePayload = [
-            'assistant_id' => $this->assistantId,
+            'assistant_id'            => $this->assistantId,
         ];
 
         $run = Http::withHeaders([
@@ -364,7 +429,7 @@ class WhatsappService
 
         $runId = (string) data_get($run->json(), 'id');
 
-        // 2) Poll until completion with detailed state logging
+        // Poll until completion
         $maxWaitSeconds = 45;
         $sleepMs        = 600;
         $elapsed        = 0;
@@ -399,15 +464,13 @@ class WhatsappService
                 'elapsed_s' => $elapsed,
             ]);
 
-            if ($status === 'completed') {
-                break;
-            }
+            if ($status === 'completed') break;
 
             if ($status === 'requires_action') {
                 $toolCalls = data_get($statusJson, 'required_action.submit_tool_outputs.tool_calls', []);
                 Log::warning('Assistants: run requires tool action (not implemented)', [
-                    'thread_id' => $threadId,
-                    'run_id'    => $runId,
+                    'thread_id'  => $threadId,
+                    'run_id'     => $runId,
                     'tool_calls' => $toolCalls,
                 ]);
                 throw new \RuntimeException('Run requires tool action but no tool outputs were provided.');
@@ -437,7 +500,7 @@ class WhatsappService
             if ($sleepMs < 1500) $sleepMs += 150; // mild backoff
         }
 
-        // 3) Fetch the latest assistant message (most recent first)
+        // Fetch latest assistant message
         $messagesResp = Http::withHeaders([
             'Authorization' => "Bearer {$this->openAiKey}",
             'Content-Type'  => 'application/json',
@@ -469,8 +532,7 @@ class WhatsappService
             }
         }
 
-        // Fallback (short, WhatsApp-friendly)
-        return '<p>Thanks for your message — how can I help further?</p>';
+        return 'Thanks for your message — how can I help further?';
     }
 
 
