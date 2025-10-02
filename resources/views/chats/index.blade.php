@@ -10,6 +10,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     {{-- font awesome --}}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
@@ -38,8 +41,8 @@
         }
 
         /* panels/cards */
-        .wa-bg-secondary {
-            background: #f0f2f5;
+        . {
+            background: #f6f5f4;
         }
 
         /* headers/toolbars */
@@ -73,86 +76,14 @@
             background: #f5f6f6;
         }
 
-        /* Loader Overlay (unchanged) */
-        .overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, .3);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 50;
+        .chat-menu-trigger {
+            pointer-events: auto;
         }
 
-        .loader {
-            position: relative;
-            width: 2.5em;
-            height: 2.5em;
-            transform: rotate(165deg);
+        .contact-item:hover .chat-menu-trigger {
+            opacity: 1;
         }
 
-        .loader:before,
-        .loader:after {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            display: block;
-            width: .5em;
-            height: .5em;
-            border-radius: .25em;
-            transform: translate(-50%, -50%);
-        }
-
-        .loader:before {
-            animation: before8 2s infinite;
-        }
-
-        .loader:after {
-            animation: after6 2s infinite;
-        }
-
-        @keyframes before8 {
-            0% {
-                width: .5em;
-                box-shadow: 1em -.5em rgba(37, 211, 102, .75), -1em .5em rgba(37, 211, 102, .75);
-            }
-
-            35% {
-                width: 2.5em;
-                box-shadow: 0 -.5em rgba(37, 211, 102, .75), 0 .5em rgba(37, 211, 102, .75);
-            }
-
-            70% {
-                width: .5em;
-                box-shadow: -1em -.5em rgba(37, 211, 102, .75), 1em .5em rgba(37, 211, 102, .75);
-            }
-
-            100% {
-                box-shadow: 1em -.5em rgba(37, 211, 102, .75), -1em .5em rgba(37, 211, 102, .75);
-            }
-        }
-
-        @keyframes after6 {
-            0% {
-                height: .5em;
-                box-shadow: .5em 1em rgba(0, 168, 132, .75), -.5em -1em rgba(0, 168, 132, .75);
-            }
-
-            35% {
-                height: 2.5em;
-                box-shadow: .5em 0 rgba(0, 168, 132, .75), -.5em 0 rgba(0, 168, 132, .75);
-            }
-
-            70% {
-                height: .5em;
-                box-shadow: .5em -1em rgba(0, 168, 132, .75), -.5em 1em rgba(0, 168, 132, .75);
-            }
-
-            100% {
-                box-shadow: .5em 1em rgba(0, 168, 132, .75), -.5em -1em rgba(0, 168, 132, .75);
-            }
-        }
 
         /* Message tails (match bubble colors) */
         .message-tail-in::before {
@@ -183,7 +114,7 @@
 
         /* Chat background */
         .chat-bg-pattern {
-            background-color: #eef3f8;
+            background-color: #f5f1eb;
         }
 
         /* Unread badge (better contrast on light) */
@@ -248,7 +179,8 @@
 
         /* Contact item active state */
         .contact-item.active {
-            background: #eef3f8;
+            background: #f6f5f4;
+            border: none !important;
         }
 
 
@@ -278,7 +210,85 @@
         }
 
         .submenu li:hover {
-            background-color: #f0f2f5;
+            background-color: #f6f5f4;
+        }
+
+        .contact-item:hover .unread-badge {
+            margin-right: 1.5rem;
+            /* or adjust to match the chevron width */
+        }
+
+
+        .swal2-cancel-btn {
+            background: transparent;
+            color: #25d366;
+            /* WhatsApp green */
+            font-weight: 500;
+            border: none;
+            outline: none;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-right: 20px !important;
+        }
+
+        .swal2-cancel-btn:hover {
+            background: #f0f0f0;
+
+        }
+
+        .swal2-delete-btn {
+            background: #ea0038;
+            /* WhatsApp-like red/pink */
+            color: #fff;
+            font-weight: 600;
+            border: none;
+            outline: none;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .swal2-delete-btn:hover {
+            background: #d30132;
+
+        }
+
+
+        /* Overlay Background for loading */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            /* background: rgba(0, 0, 0, 0.6); */
+            /* black with transparency */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            /* keep it above everything */
+        }
+
+        /* Rotating Loader Image */
+        .loading-image {
+            width: 50px;
+            /* Adjust the size as needed */
+            height: 50px;
+            /* Adjust the size as needed */
+            animation: rotateImage 2s linear infinite;
+        }
+
+        /* Keyframes for rotating the image */
+        @keyframes rotateImage {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
@@ -288,7 +298,7 @@
         <!-- Sidebar / Contact List -->
         <aside id="contactsPane" class="w-full md:w-1/4 flex flex-col wa-bg-primary border-r wa-border">
             <!-- Profile / Brand -->
-            <div class="p-4 wa-bg-secondary">
+            <div class="p-4 ">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-3">
                         <div class="relative">
@@ -317,10 +327,10 @@
                         </button>
 
                         <!-- Submenu -->
-                        <div id="submenu" class="submenu hidden absolute bg-white shadow-lg rounded-md p-2">
+                        <div id="submenu" class="submenu hidden absolute bg-white shadow-lg rounded-lg p-2">
                             <ul>
                                 <a href="{{ route('admin.logout') }}">
-                                    <li class="p-2 hover:bg-gray-200"><i class="fa fa-sign-out "></i> Log out</li>
+                                    <li class="hover:bg-gray-200 rounded-lg"><i class="fa fa-sign-out "></i> Log out</li>
                                 </a>
                             </ul>
                         </div>
@@ -343,10 +353,10 @@
             </div>
 
             <!-- Chats -->
-            <div id="contactsList" class="flex-1 overflow-y-auto scrollbar-hide custom-scrollbar">
+            <div id="contactsList" class="flex-1 overflow-y-auto scrollbar-hide custom-scrollbar p-3">
                 @foreach ($conversations as $conversation)
                     <button
-                        class="contact-item w-full text-left px-4 py-3 wa-hover  wa-border transition-colors duration-150"
+                        class="contact-item relative w-full text-left px-4 py-3  wa-hover wa-border transition-colors duration-150 p-2 rounded-2xl"
                         sid="{{ $conversation->sid }}" data-name="{{ $conversation->contact }}"
                         data-last-message="{{ $conversation->last_message_body ?? '' }}"
                         data-last-time="{{ $conversation->last_message }}">
@@ -355,18 +365,40 @@
                                 class="w-12 h-12 rounded-full object-cover flex-shrink-0" />
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-start justify-between ">
-                                    <h4 class=" wa-text-primary truncate flex-1">{{ $conversation->contact }}
-                                    </h4>
-                                    <span
-                                        class="text-xs wa-text-secondary ml-2 whitespace-nowrap">{{ Carbon\Carbon::parse($conversation->last_message)->format('g:i A') }}</span>
+                                    <h4 class="wa-text-primary truncate flex-1">{{ $conversation->contact }}</h4>
+                                    <span class="text-xs wa-text-secondary ml-2 whitespace-nowrap">
+                                        {{ Carbon\Carbon::parse($conversation->last_message)->format('g:i A') }}
+                                    </span>
                                 </div>
                                 <div class="flex items-center justify-between">
-                                    <p class="text-sm wa-text-secondary truncate flex-1 last-message-preview">
-                                        {{ $conversation->last_message_body ?? 'No messages yet' }}
+                                    <p class="text-sm wa-text-secondary truncate flex-1 last-message-preview"
+                                        title="{{ $conversation->unread_message }}">
+                                        {{ Str::limit($conversation->unread_message ?? 'No messages yet', 40) }}
                                     </p>
-                                    <span class="unread-badge ml-2">2</span>
+
+                                    @if ($conversation->unread_count > 0)
+                                        <span class="unread-badge ml-2 ">{{ $conversation->unread_count }}</span>
+                                    @else
+                                        <span class="unread-badge ml-2" style="display: none"></span>
+                                    @endif
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Action Menu Trigger -->
+                        <div
+                            class="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition duration-150 chat-menu-trigger">
+                            <i class="fa fa-chevron-down text-gray-500 cursor-pointer"></i>
+                        </div>
+
+                        <!-- Dropdown -->
+                        <div class="hidden absolute right-7 top-15 -translate-y-1/2 bg-white shadow-lg rounded-xl py-1 z-50 chat-menu-dropdown px-2 py-2"
+                            style="width: 45%;">
+                            <ul>
+                                <li class="px-4 py-2  hover:bg-gray-100 cursor-pointer text-md  delete-chat-btn wa-text-primary rounded-lg">
+                                    <i class="fa fa-trash-o"></i> Delete chat
+                                </li>
+                            </ul>
                         </div>
                     </button>
                 @endforeach
@@ -378,7 +410,7 @@
         <!-- Chat Pane -->
         <main id="chatPane" class="flex-1 flex flex-col md:flex">
             <!-- Chat Header -->
-            <div class="chat-header hidden wa-bg-secondary p-3 shadow-sm">
+            <div class="chat-header hidden  py-4 shadow-lg">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-3 flex-1 min-w-0">
                         <!-- Back (mobile only) -->
@@ -422,9 +454,9 @@
             </div>
 
             <!-- Composer -->
-            <div class="chat-input hidden wa-bg-secondary p-3">
-                <div
-                    class="flex items-end space-x-2 rounded-full focus:outline-none  border border-gray-200  px-2 bg-white">
+            <div class="chat-input hidden  p-3" style="background: #F5F1EB;">
+                <div class="flex items-end space-x-2 rounded-full focus:outline-none  border border-gray-200  px-2 bg-white shadow-lg"
+                    style="padding-top:3px; padding-bottom:3px;">
                     <div class="flex items-center space-x-2 mb-1">
                         <!-- Pause Auto-reply Icon -->
                         <button id="pause_autoreply"
@@ -464,10 +496,15 @@
     </div>
 
     <!-- Loader -->
-    <div id="overlay" class="overlay">
+    {{-- <div id="overlay" class="overlay">
         <div class="loader"></div>
+    </div> --}}
+
+    <div class="overlay" style="display: none" id="overlay">
+        <img src="{{ asset('assets/icons/Loading.png') }}" class="loading-image" alt="Loading...">
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script>
         function scrollToBottom() {
             var messagesArea = document.getElementById('messagesArea');
@@ -483,9 +520,11 @@
 
         channel.bind('my-event', function(data) {
             console.log('Received data:', data);
-             const $contact = $(`.contact-item[sid="${data.sid}"]`);
+            const $contact = $(`.contact-item[sid="${data.sid}"]`);
             if ($contact.length) {
-                $contact.find('.last-message-preview').text(data.message.substring(0, 50) + (data.message.length > 50 ? '...' : ''));
+                $contact.find('.last-message-preview').text(data.message.substring(0, 40) + (data.message.length >
+                    40 ? '...' : ''));
+                $contact.find('span.unread-badge').css('display', 'block');
                 $contact.find('span.unread-badge').text(function(i, oldText) {
                     return oldText === '' ? '1' : (parseInt(oldText) + 1).toString();
                 }).removeClass('hidden');
@@ -542,12 +581,90 @@
         function updateLastMessage(sid, message) {
             const $contact = $(`.contact-item[sid="${sid}"]`);
             if ($contact.length) {
-                $contact.find('.last-message-preview').text(message.substring(0, 50) + (message.length > 50 ? '...' : ''));
+                $contact.find('.last-message-preview').text(message.substring(0, 40) + (message.length > 40 ? '...' : ''));
                 $contact.attr('data-last-message', message);
                 // Move to top of list
                 $contact.prependTo('#contactsList');
             }
         }
+
+
+        // delete chat
+        // Toggle dropdown on click
+        $(document).on('click', '.chat-menu-trigger', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+
+            let $dropdown = $(this).siblings('.chat-menu-dropdown');
+
+            if ($dropdown.is(':visible')) {
+                // if it's already open, just close it
+                $dropdown.hide();
+            } else {
+                // close all others, then open this one
+                $('.chat-menu-dropdown').hide();
+                $dropdown.show();
+            }
+        });
+        // Delete handler
+        $(document).on('click', '.delete-chat-btn', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+
+            const $contact = $(this).closest('.contact-item');
+            const sid = $contact.attr('sid');
+            const contactName = $contact.data('name');
+
+            Swal.fire({
+                title: `Delete chat with ${contactName}?`,
+                text: "Messages will be removed from all devices.",
+                showCancelButton: true,
+                reverseButtons: true, // puts Cancel on the left, Delete on the right
+                customClass: {
+                    popup: 'rounded-2xl p-6', // rounded corners, padding
+                    title: 'text-lg font-semibold text-gray-800',
+                    htmlContainer: 'text-sm text-gray-600',
+                    confirmButton: 'swal2-delete-btn',
+                    cancelButton: 'swal2-cancel-btn'
+                },
+                buttonsStyling: false, // we’ll apply custom classes instead
+                confirmButtonText: 'Delete',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: "{{ url('chat/delete') }}/" + sid,
+                        method: 'GET',
+                        success: function(response) {
+                            if (response.success) {
+                                $(`.contact-item[sid="${sid}"]`).remove();
+
+                                if ($('#chat-sid').val() === sid) {
+                                    $('#messagesArea').empty();
+                                    $('.chat-header, .chat-input').addClass('hidden');
+                                    $('#chat-sid').val('');
+                                    $('#chatHeaderName').text('Chat');
+                                    $('#chatHeaderAvatar').attr('src', '');
+                                }
+
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Deleted',
+                                    text: `Chat with ${contactName} has been deleted.`,
+                                    timer: 1500,
+                                    showConfirmButton: false
+                                });
+                            } else {
+                                Swal.fire('Error', response.error || 'Unknown error', 'error');
+                            }
+                        },
+                        error: function() {
+                            Swal.fire('Error', 'Error deleting chat!', 'error');
+                        }
+                    });
+                }
+            });
+        });
 
 
 
@@ -629,9 +746,12 @@
 
             // Contact selection
             $('.contact-item').on('click', function() {
+                if ($('.chat-menu-trigger:hover').length) return; // ignore if menu trigger is clicked
+                if ($('.delete-chat-btn:hover').length) return; // ignore if menu trigger is clicked
+
                 $('.contact-item').removeClass('active');
                 $(this).addClass('active');
-
+                $(this).find('span.unread-badge').css('display', 'none');
                 const contactName = $(this).data('name');
                 const contactImg = $(this).find('img').attr('src');
                 const sid = $(this).attr('sid');

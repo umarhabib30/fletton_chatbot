@@ -7,12 +7,12 @@ use App\Mail\AssistantFailureMail;
 use App\Models\ChatControll;
 use App\Models\ChatHistory;
 use Carbon\Carbon;
-use Twilio\Rest\Client;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
+use Twilio\Rest\Client;
 
 class WhatsappService
 {
@@ -51,24 +51,24 @@ class WhatsappService
         $this->openAiKey = config('services.openai.key');
     }
 
-
-
     // send first template message
     public function sendWhatsAppMessage($request)
     {
-
         $recipientNumber = 'whatsapp:' . $request->phone;
-        $friendlyName    = $request->phone;
-        $message         = 'Hello from fletton surveys';
-        $contentSid      = 'HX8febaed305fb3d6f705269f53975e86c';
+        $friendlyName = $request->phone;
+        $message = 'Hello from fletton surveys';
+        $contentSid = 'HX8febaed305fb3d6f705269f53975e86c';
 
-        $twilio       = $this->twilio;       // \Twilio\Rest\Client
-        $proxyAddress = $this->whatsappFrom; // e.g. 'whatsapp:+14155238886'
+        $twilio = $this->twilio;  // \Twilio\Rest\Client
+        $proxyAddress = $this->whatsappFrom;  // e.g. 'whatsapp:+14155238886'
 
         try {
             // 0) Find or create Twilio Conversation for this WhatsApp number
             $existingSid = null;
-            $pcs = $twilio->conversations->v1->participantConversations
+            $pcs = $twilio
+                ->conversations
+                ->v1
+                ->participantConversations
                 ->read(['address' => $recipientNumber], 20);
 
             foreach ($pcs as $pc) {
@@ -80,16 +80,22 @@ class WhatsappService
             }
 
             if (!$existingSid) {
-                $conversation = $twilio->conversations->v1->conversations
+                $conversation = $twilio
+                    ->conversations
+                    ->v1
+                    ->conversations
                     ->create(['friendlyName' => $friendlyName]);
 
                 $existingSid = $conversation->sid;
 
                 try {
-                    $twilio->conversations->v1->conversations($existingSid)
+                    $twilio
+                        ->conversations
+                        ->v1
+                        ->conversations($existingSid)
                         ->participants
                         ->create([
-                            'messagingBindingAddress'      => $recipientNumber,
+                            'messagingBindingAddress' => $recipientNumber,
                             'messagingBindingProxyAddress' => $proxyAddress,
                         ]);
                 } catch (\Twilio\Exceptions\RestException $e) {
@@ -111,12 +117,15 @@ class WhatsappService
             $firstName = ucfirst(strtolower($firstName));
 
             // 1) Send the (template) message
-            $msg = $twilio->conversations->v1->conversations($existingSid)
+            $msg = $twilio
+                ->conversations
+                ->v1
+                ->conversations($existingSid)
                 ->messages
                 ->create([
-                    'author'           => 'system',
-                    'body'             => $message, // optional with contentSid
-                    'contentSid'       => $contentSid,
+                    'author' => 'system',
+                    'body' => $message,  // optional with contentSid
+                    'contentSid' => $contentSid,
                     'contentVariables' => json_encode(['1' => (string) $firstName]),
                 ]);
 
@@ -125,13 +134,16 @@ class WhatsappService
             $contact = ChatControll::updateOrCreate(
                 ['sid' => $existingSid],
                 [
-                    'contact'     => $friendlyName,
-                    'auto_reply'  => true,
-                     'first_name'  => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $request->first_name))),
-                     'last_name'   => preg_replace('/[^a-zA-Z]/', '', $request->last_name),
-                    'email'       => $request->email,
-                    'address'     => $request->address,
+                    'contact' => $friendlyName,
+                    'auto_reply' => true,
+                    'first_name' => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $request->first_name))),
+                    'last_name' => preg_replace('/[^a-zA-Z]/', '', $request->last_name),
+                    'email' => $request->email,
+                    'address' => $request->address,
                     'postal_code' => $request->postal_code,
+                    'unread' => true,
+                    'unread_count' => 1,
+                    'unread_message' => $message,
                 ]
             );
 
@@ -143,19 +155,20 @@ class WhatsappService
                 'date_created' => Carbon::now()->toDateTimeString(),
             ]);
 
+            event(new MessageSent($message, $existingSid, 'admin'));
             // 3) Create/seed the OpenAI thread using ONLY getOrCreateThreadId
             $this->getOrCreateThreadId($friendlyName, [
-                'first_name'  => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $contact->first_name))),
-                'last_name'   => preg_replace('/[^a-zA-Z]/', '', $contact->last_name),
-                'email'       => $contact->email,
-                'address'     => $contact->address,
+                'first_name' => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $contact->first_name))),
+                'last_name' => preg_replace('/[^a-zA-Z]/', '', $contact->last_name),
+                'email' => $contact->email,
+                'address' => $contact->address,
                 'postal_code' => $contact->postal_code,
             ]);
 
             return response()->json([
-                'message'          => 'WhatsApp message sent successfully',
+                'message' => 'WhatsApp message sent successfully',
                 'conversation_sid' => $existingSid,
-                'message_sid'      => $msg->sid,
+                'message_sid' => $msg->sid,
             ]);
         } catch (\Twilio\Exceptions\RestException $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -164,28 +177,27 @@ class WhatsappService
         }
     }
 
-
-
     /**
      * Send a custom conversation message
      */
     public function sendCustomMessage(string $conversationSid, string $message)
     {
         try {
-            $msg = $this->twilio
+            $msg = $this
+                ->twilio
                 ->conversations
                 ->v1
                 ->conversations($conversationSid)
                 ->messages
                 ->create([
                     'author' => 'system',
-                    'body'   => $message,
+                    'body' => $message,
                 ]);
 
             return response()->json([
-                'message'         => 'Sent via Conversation',
+                'message' => 'Sent via Conversation',
                 'conversationSid' => $conversationSid,
-                'messageSid'      => $msg->sid,
+                'messageSid' => $msg->sid,
             ]);
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -198,23 +210,23 @@ class WhatsappService
     public function getConversations(): array
     {
         try {
-            $convs = $this->twilio
+            $convs = $this
+                ->twilio
                 ->conversations
                 ->v1
                 ->conversations
-                ->stream(); // fetches ALL conversations, auto-paginates
+                ->stream();  // fetches ALL conversations, auto-paginates
 
             return array_map(fn($c) => [
-                'sid'           => $c->sid,
+                'sid' => $c->sid,
                 'friendly_name' => $c->friendlyName,
-                'state'         => $c->state,
-                'date_created'  => $c->dateCreated->format('Y-m-d H:i:s'),
+                'state' => $c->state,
+                'date_created' => $c->dateCreated->format('Y-m-d H:i:s'),
             ], iterator_to_array($convs));
         } catch (\Exception $e) {
             return ['error' => $e->getMessage()];
         }
     }
-
 
     //  public function getConversations(): array
     // {
@@ -256,28 +268,87 @@ class WhatsappService
     //     }
     // }
 
-
     /**
      * Get messages for one conversation
      */
     public function getMessages(string $conversationSid): array
     {
         try {
-            $msgs = $this->twilio
-                ->conversations
-                ->v1
-                ->conversations($conversationSid)
-                ->messages
-                ->read();
+            // $msgs = $this
+            //     ->twilio
+            //     ->conversations
+            //     ->v1
+            //     ->conversations($conversationSid)
+            //     ->messages
+            //     ->read();
 
-            return array_map(fn($m) => [
-                'sid'          => $m->sid,
-                'author'       => $m->author,
-                'body'         => $m->body,
-                'date_created' => $m->dateCreated->format('Y-m-d H:i:s'),
-            ], $msgs);
+            // return array_map(fn($m) => [
+            //     'sid' => $m->sid,
+            //     'author' => $m->author,
+            //     'body' => $m->body,
+            //     'date_created' => $m->dateCreated->format('Y-m-d H:i:s'),
+            // ], $msgs);
+            $chats = ChatControll::where('sid', $conversationSid)->first();
+            $chats->update([
+                'unread' => false,
+                'unread_count' => 0,
+            ]);
+
+            $msgs = ChatHistory::where('conversation_sid', $conversationSid)
+                ->orderBy('date_created', 'asc')
+                ->get(['message_sid', 'author', 'body', 'date_created']);
+
+            return $msgs->map(function ($m) {
+                return [
+                    'sid' => $m->message_sid,  // matches Twilio 'sid'
+                    'author' => $m->author,
+                    'body' => $m->body,
+                    'date_created' => $m->date_created
+                        ? Carbon::parse($m->date_created)->format('Y-m-d H:i:s')
+                        : null,
+                ];
+            })->toArray();
         } catch (\Exception $e) {
             return ['error' => $e->getMessage()];
+        }
+    }
+
+    public function syncChats()
+    {
+        dd('syncChats');
+        try {
+            $conversations = $this->getConversations();
+
+            if (isset($conversations['error'])) {
+                return response()->json(['error' => $conversations['error']], 500);
+            }
+
+            foreach ($conversations as $conv) {
+                $msgs = $this
+                    ->twilio
+                    ->conversations
+                    ->v1
+                    ->conversations($conv['sid'])
+                    ->messages
+                    ->read();
+
+                foreach ($msgs as $msg) {
+                    ChatHistory::create([
+                        'conversation_sid' => $conv['sid'],
+                        'message_sid' => $msg->sid ?? null,
+                        'body' => $msg->body ?? '',
+                        'author' => $msg->author,
+                        'date_created' => Carbon::parse($msg->dateCreated)->format('Y-m-d H:i:s'),
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'message' => 'Chats synchronized successfully',
+                'count' => count($conversations),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -287,18 +358,25 @@ class WhatsappService
     public function deleteConversation(string $conversationSid)
     {
         try {
-            $this->twilio
+            $this
+                ->twilio
                 ->conversations
                 ->v1
                 ->conversations($conversationSid)
                 ->delete();
 
+            ChatControll::where('sid', $conversationSid)->delete();
+            ChatHistory::where('conversation_sid', $conversationSid)->delete();
             return response()->json([
-                'message'          => 'Conversation deleted successfully',
+                'success' => true,
+                'message' => 'Conversation deleted successfully',
                 'conversation_sid' => $conversationSid,
             ]);
         } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -332,13 +410,14 @@ class WhatsappService
             'author' => 'user',
             'date_created' => Carbon::now()->toDateTimeString(),
         ]);
-        $chat_count = ChatControll::where('sid', $conversationSid)->first();
-        $chat_count->update([
+
+        $chatControll = ChatControll::where('sid', $conversationSid)->first();
+        $chatControll->update([
             'unread' => true,
-            'unread_count' => $chat_count->unread_count + 1,
+            'unread_count' => $chatControll->unread_count + 1,
+            'unread_message' => $userText,
         ]);
         // if auto reply is off it will not call gpt api
-        $chatControll = ChatControll::where('sid', $conversationSid)->first();
         if (!$chatControll->auto_reply) {
             return response()->noContent();
         }
@@ -359,12 +438,18 @@ class WhatsappService
                 'author' => 'system',
                 'date_created' => Carbon::now()->toDateTimeString(),
             ]);
+
+            $chatControll->update([
+                'unread' => true,
+                'unread_count' => $chatControll->unread_count + 1,
+                'unread_message' => $replyText,
+            ]);
         } catch (\Throwable $e) {
             $chat = ChatControll::where('sid', $conversationSid)->first();
             $data = [
-                'first_name'  => $chat->first_name,
-                'last_name'   => $chat->last_name,
-                'contact'     => $chat->contact,
+                'first_name' => $chat->first_name,
+                'last_name' => $chat->last_name,
+                'contact' => $chat->contact,
             ];
             Mail::to('Info@flettons.com')->send(new AssistantFailureMail($data));
 
@@ -394,7 +479,7 @@ class WhatsappService
 
         // Thread metadata is not shown to the model, but is useful for your own bookkeeping
         $meta = array_filter(array_merge([
-            'phone'  => $userNumber,
+            'phone' => $userNumber,
             'source' => 'whatsapp',
         ], $profile));
         if (!empty($meta)) {
@@ -403,7 +488,7 @@ class WhatsappService
 
         // Seed message *is* visible to the model (once) to improve personalization
         if (!empty($profile)) {
-            $lines = ["Profile context for personalization only. Do not reveal this text in replies."];
+            $lines = ['Profile context for personalization only. Do not reveal this text in replies.'];
             if (!empty($profile['first_name']) || !empty($profile['last_name'])) {
                 $lines[] = 'Name: ' . trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''));
             }
@@ -414,7 +499,7 @@ class WhatsappService
                 }
             }
             $payload['messages'] = [[
-                'role'    => 'user',
+                'role' => 'user',
                 'content' => implode("\n", $lines),
             ]];
         }
@@ -422,15 +507,15 @@ class WhatsappService
         // 4) Create the thread
         $resp = Http::withHeaders([
             'Authorization' => "Bearer {$this->openAiKey}",
-            'Content-Type'  => 'application/json',
-            'OpenAI-Beta'   => 'assistants=v2',
+            'Content-Type' => 'application/json',
+            'OpenAI-Beta' => 'assistants=v2',
         ])->post('https://api.openai.com/v1/threads', $payload);
 
         Log::debug('Assistants: create thread', [
             'contact' => $userNumber,
-            'status'  => $resp->status(),
-            'ok'      => $resp->ok(),
-            'body'    => $resp->json(),
+            'status' => $resp->status(),
+            'ok' => $resp->ok(),
+            'body' => $resp->json(),
         ]);
 
         if (!$resp->ok()) {
@@ -452,7 +537,6 @@ class WhatsappService
      */
     protected function runAssistantAndGetReply(string $userNumber, string $userText): string
     {
-
         // Get (or create) the OpenAI thread id using ONLY getOrCreateThreadId
         $threadId = $this->getOrCreateThreadId($userNumber);
 
@@ -460,18 +544,18 @@ class WhatsappService
         $addMessageToThread = function (string $threadId) use ($userText) {
             $resp = Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
-                'Content-Type'  => 'application/json',
-                'OpenAI-Beta'   => 'assistants=v2',
+                'Content-Type' => 'application/json',
+                'OpenAI-Beta' => 'assistants=v2',
             ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
-                'role'    => 'user',
+                'role' => 'user',
                 'content' => $userText,
             ]);
 
             Log::debug('Assistants: add message response', [
                 'thread_id' => $threadId,
-                'status'    => $resp->status(),
-                'ok'        => $resp->ok(),
-                'body'      => $resp->json(),
+                'status' => $resp->status(),
+                'ok' => $resp->ok(),
+                'body' => $resp->json(),
             ]);
 
             return $resp;
@@ -481,7 +565,7 @@ class WhatsappService
         $addMsg = $addMessageToThread($threadId);
         if ($addMsg->status() === 404) {
             Log::warning('Assistants: thread 404, recreating', [
-                'thread_id'   => $threadId,
+                'thread_id' => $threadId,
                 'user_number' => $userNumber,
             ]);
 
@@ -490,7 +574,7 @@ class WhatsappService
                 ->update(['assistant_thread_id' => null]);
 
             $threadId = $this->getOrCreateThreadId($userNumber);
-            $addMsg   = $addMessageToThread($threadId);
+            $addMsg = $addMessageToThread($threadId);
         }
         if (!$addMsg->ok()) {
             throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
@@ -498,20 +582,20 @@ class WhatsappService
 
         // Create a run (keep your dynamic instructions if you have that helper)
         $runCreatePayload = [
-            'assistant_id'            => $this->assistantId,
+            'assistant_id' => $this->assistantId,
         ];
 
         $run = Http::withHeaders([
             'Authorization' => "Bearer {$this->openAiKey}",
-            'Content-Type'  => 'application/json',
-            'OpenAI-Beta'   => 'assistants=v2',
+            'Content-Type' => 'application/json',
+            'OpenAI-Beta' => 'assistants=v2',
         ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", $runCreatePayload);
 
         Log::debug('Assistants: run created', [
             'thread_id' => $threadId,
-            'status'    => $run->status(),
-            'ok'        => $run->ok(),
-            'body'      => $run->json(),
+            'status' => $run->status(),
+            'ok' => $run->ok(),
+            'body' => $run->json(),
         ]);
 
         if (!$run->ok()) {
@@ -522,8 +606,8 @@ class WhatsappService
 
         // Poll until completion
         $maxWaitSeconds = 45;
-        $sleepMs        = 600;
-        $elapsed        = 0;
+        $sleepMs = 600;
+        $elapsed = 0;
 
         while (true) {
             usleep($sleepMs * 1000);
@@ -531,37 +615,38 @@ class WhatsappService
 
             $statusResp = Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
-                'Content-Type'  => 'application/json',
-                'OpenAI-Beta'   => 'assistants=v2',
+                'Content-Type' => 'application/json',
+                'OpenAI-Beta' => 'assistants=v2',
             ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
 
             if (!$statusResp->ok()) {
                 Log::error('Assistants: failed to check run', [
                     'thread_id' => $threadId,
-                    'run_id'    => $runId,
-                    'status'    => $statusResp->status(),
-                    'body'      => $statusResp->body(),
+                    'run_id' => $runId,
+                    'status' => $statusResp->status(),
+                    'body' => $statusResp->body(),
                 ]);
                 throw new \RuntimeException('Failed to check run: ' . $statusResp->body());
             }
 
             $statusJson = $statusResp->json();
-            $status     = (string) data_get($statusJson, 'status', 'queued');
+            $status = (string) data_get($statusJson, 'status', 'queued');
 
             Log::debug('Assistants: run status tick', [
                 'thread_id' => $threadId,
-                'run_id'    => $runId,
-                'status'    => $status,
+                'run_id' => $runId,
+                'status' => $status,
                 'elapsed_s' => $elapsed,
             ]);
 
-            if ($status === 'completed') break;
+            if ($status === 'completed')
+                break;
 
             if ($status === 'requires_action') {
                 $toolCalls = data_get($statusJson, 'required_action.submit_tool_outputs.tool_calls', []);
                 Log::warning('Assistants: run requires tool action (not implemented)', [
-                    'thread_id'  => $threadId,
-                    'run_id'     => $runId,
+                    'thread_id' => $threadId,
+                    'run_id' => $runId,
                     'tool_calls' => $toolCalls,
                 ]);
                 throw new \RuntimeException('Run requires tool action but no tool outputs were provided.');
@@ -569,11 +654,11 @@ class WhatsappService
 
             if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
                 Log::error('Assistants: run terminal error', [
-                    'thread_id'  => $threadId,
-                    'run_id'     => $runId,
-                    'status'     => $status,
+                    'thread_id' => $threadId,
+                    'run_id' => $runId,
+                    'status' => $status,
                     'last_error' => data_get($statusJson, 'last_error', null),
-                    'full'       => $statusJson,
+                    'full' => $statusJson,
                 ]);
                 $lastError = data_get($statusJson, 'last_error.message') ?? 'unknown error';
                 throw new \RuntimeException("Run {$status}: {$lastError}");
@@ -582,20 +667,21 @@ class WhatsappService
             if ($elapsed >= $maxWaitSeconds) {
                 Log::error('Assistants: run timed out', [
                     'thread_id' => $threadId,
-                    'run_id'    => $runId,
+                    'run_id' => $runId,
                     'last_seen' => $status,
                 ]);
                 throw new \RuntimeException('Run timed out waiting for completion.');
             }
 
-            if ($sleepMs < 1500) $sleepMs += 150; // mild backoff
+            if ($sleepMs < 1500)
+                $sleepMs += 150;  // mild backoff
         }
 
         // Fetch latest assistant message
         $messagesResp = Http::withHeaders([
             'Authorization' => "Bearer {$this->openAiKey}",
-            'Content-Type'  => 'application/json',
-            'OpenAI-Beta'   => 'assistants=v2',
+            'Content-Type' => 'application/json',
+            'OpenAI-Beta' => 'assistants=v2',
         ])->get("https://api.openai.com/v1/threads/{$threadId}/messages", [
             'limit' => 5,
             'order' => 'desc',
@@ -603,9 +689,9 @@ class WhatsappService
 
         Log::debug('Assistants: messages fetch', [
             'thread_id' => $threadId,
-            'status'    => $messagesResp->status(),
-            'ok'        => $messagesResp->ok(),
-            'body'      => $messagesResp->json(),
+            'status' => $messagesResp->status(),
+            'ok' => $messagesResp->ok(),
+            'body' => $messagesResp->json(),
         ]);
 
         if (!$messagesResp->ok()) {
@@ -614,21 +700,19 @@ class WhatsappService
 
         $items = (array) data_get($messagesResp->json(), 'data', []);
         foreach ($items as $msg) {
-            if (($msg['role'] ?? '') !== 'assistant') continue;
+            if (($msg['role'] ?? '') !== 'assistant')
+                continue;
             foreach (($msg['content'] ?? []) as $block) {
                 if (($block['type'] ?? '') === 'text') {
                     $val = (string) data_get($block, 'text.value', '');
-                    if ($val !== '') return $val;
+                    if ($val !== '')
+                        return $val;
                 }
             }
         }
 
         return 'Thanks for your message — how can I help further?';
     }
-
-
-
-
 
     // In WhatsappService
 
@@ -643,7 +727,7 @@ class WhatsappService
         $normalized = preg_replace_callback('~<a\b[^>]*>(.*?)</a>~is', function ($m) {
             $tag = $m[0];
             if (preg_match('~href\s*=\s*([\'"])(.*?)\1~i', $tag, $hrefMatch)) {
-                return $hrefMatch[2]; // keep only the URL
+                return $hrefMatch[2];  // keep only the URL
             }
             // No href found: drop the tag but keep inner text as last resort
             return isset($m[1]) ? strip_tags($m[1]) : '';

@@ -11,7 +11,7 @@ class ChatController extends Controller
 {
     public function index()
     {
-        $conversations = ChatControll::orderBy('updated_at', 'desc')->get();
+        $conversations = ChatControll::orderBy('last_message', 'desc')->get();
         $data = [
             'conversations' => $conversations,
         ];
@@ -34,6 +34,13 @@ class ChatController extends Controller
         $messages = $watsAppService->getMessages($conversationSid);
         $auto_reply = (int) ChatControll::where('sid', $conversationSid)->value('auto_reply') ?? 0;
         return response()->json(['messages' => $messages, 'auto_reply' => $auto_reply]);
+    }
+
+    public function syncChats()
+    {
+        $watsAppService = new WhatsappService();
+        $response = $watsAppService->syncChats();
+        return response()->json($response);
     }
 
     public function sendCustomMessage(Request $request)

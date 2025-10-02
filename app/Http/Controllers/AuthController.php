@@ -16,10 +16,9 @@ class AuthController extends Controller
         if (auth()->attempt($credentials)) {
             return redirect()->intended('/');
         }
+        // dd('Invalid credentials');
 
-        return back()->withErrors([
-            'email' => 'The provided credentials do not match our records.',
-        ]);
+        return redirect()->back()->with('error', 'Invalid credentials');
     }
 
     public function logout(){
