@@ -138,8 +138,10 @@ class WhatsappService
             ChatHistory::create([
                 'conversation_sid' => $existingSid,
                 'message_sid' => $msg->sid,
-                'message' => $message,
-                'sender' => 'system',]);
+                'body' => $message,
+                'author' => 'system',
+                'date_created' => Carbon::now()->toDateTimeString(),
+            ]);
 
             // 3) Create/seed the OpenAI thread using ONLY getOrCreateThreadId
             $this->getOrCreateThreadId($friendlyName, [
@@ -326,8 +328,10 @@ class WhatsappService
         // save user message to chat history
         ChatHistory::create([
             'conversation_sid' => $conversationSid,
-            'message' => $userText,
-            'sender' => 'user',]);
+            'body' => $userText,
+            'author' => 'user',
+            'date_created' => Carbon::now()->toDateTimeString(),
+        ]);
         $chat_count = ChatControll::where('sid', $conversationSid)->first();
         $chat_count->update([
             'unread' => true,
@@ -351,8 +355,10 @@ class WhatsappService
             // save admin message to chat history
             ChatHistory::create([
                 'conversation_sid' => $conversationSid,
-                'message' => $replyText,
-                'sender' => 'system',]);
+                'body' => $replyText,
+                'author' => 'system',
+                'date_created' => Carbon::now()->toDateTimeString(),
+            ]);
         } catch (\Throwable $e) {
             $chat = ChatControll::where('sid', $conversationSid)->first();
             $data = [
