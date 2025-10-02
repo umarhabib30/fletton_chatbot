@@ -3,12 +3,16 @@
 namespace App\Services;
 
 use App\Events\MessageSent;
+use App\Mail\AssistantFailureMail;
 use App\Models\ChatControll;
+use App\Models\ChatHistory;
+use Carbon\Carbon;
 use Twilio\Rest\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Mail;
 
 class WhatsappService
 {
@@ -31,7 +35,7 @@ class WhatsappService
      * Your Assistant ID (Flettons Customer Services)
      * as configured in OpenAI.
      */
-    protected string $assistantId = 'asst_4BpKBwmugxf2eYL3Ug64TwVO';
+    protected string $assistantId = 'asst_9PwjdWdvkrEfmbm8s8BFzBot';
 
     public function __construct()
     {
@@ -47,13 +51,16 @@ class WhatsappService
         $this->openAiKey = config('services.openai.key');
     }
 
+
+
     // send first template message
     public function sendWhatsAppMessage($request)
     {
+
         $recipientNumber = 'whatsapp:' . $request->phone;
         $friendlyName    = $request->phone;
         $message         = 'Hello from fletton surveys';
-        $contentSid      = 'HX08f90cc17d7e6fc0ae7e9bd5252b7530';
+        $contentSid      = 'HX8febaed305fb3d6f705269f53975e86c';
 
         $twilio       = $this->twilio;       // \Twilio\Rest\Client
         $proxyAddress = $this->whatsappFrom; // e.g. 'whatsapp:+14155238886'
@@ -92,6 +99,17 @@ class WhatsappService
                 }
             }
 
+            $firstName = trim($request->first_name);
+
+            // Take only the first word in case both first & last name are entered
+            $firstName = explode(' ', $firstName)[0];
+
+            // Remove symbols, keep only letters
+            $firstName = preg_replace('/[^a-zA-Z]/', '', $firstName);
+
+            // Make lowercase then capitalize first letter
+            $firstName = ucfirst(strtolower($firstName));
+
             // 1) Send the (template) message
             $msg = $twilio->conversations->v1->conversations($existingSid)
                 ->messages
@@ -99,7 +117,7 @@ class WhatsappService
                     'author'           => 'system',
                     'body'             => $message, // optional with contentSid
                     'contentSid'       => $contentSid,
-                    'contentVariables' => json_encode(['1' => (string) $request->first_name]),
+                    'contentVariables' => json_encode(['1' => (string) $firstName]),
                 ]);
 
             // 2) Upsert the contact + profile in DB
@@ -109,18 +127,24 @@ class WhatsappService
                 [
                     'contact'     => $friendlyName,
                     'auto_reply'  => true,
-                    'first_name'  => $request->first_name,
-                    'last_name'   => $request->last_name,
+                     'first_name'  => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $request->first_name))),
+                     'last_name'   => preg_replace('/[^a-zA-Z]/', '', $request->last_name),
                     'email'       => $request->email,
                     'address'     => $request->address,
                     'postal_code' => $request->postal_code,
                 ]
             );
 
+            ChatHistory::create([
+                'conversation_sid' => $existingSid,
+                'message_sid' => $msg->sid,
+                'message' => $message,
+                'sender' => 'system',]);
+
             // 3) Create/seed the OpenAI thread using ONLY getOrCreateThreadId
             $this->getOrCreateThreadId($friendlyName, [
-                'first_name'  => $contact->first_name,
-                'last_name'   => $contact->last_name,
+                'first_name'  => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $contact->first_name))),
+                'last_name'   => preg_replace('/[^a-zA-Z]/', '', $contact->last_name),
                 'email'       => $contact->email,
                 'address'     => $contact->address,
                 'postal_code' => $contact->postal_code,
@@ -176,18 +200,60 @@ class WhatsappService
                 ->conversations
                 ->v1
                 ->conversations
-                ->read();
+                ->stream(); // fetches ALL conversations, auto-paginates
 
             return array_map(fn($c) => [
                 'sid'           => $c->sid,
                 'friendly_name' => $c->friendlyName,
                 'state'         => $c->state,
                 'date_created'  => $c->dateCreated->format('Y-m-d H:i:s'),
-            ], $convs);
+            ], iterator_to_array($convs));
         } catch (\Exception $e) {
             return ['error' => $e->getMessage()];
         }
     }
+
+
+    //  public function getConversations(): array
+    // {
+    //     try {
+    //         $convs = $this->twilio
+    //             ->conversations
+    //             ->v1
+    //             ->conversations
+    //             ->stream(); // all conversations
+
+    //         $result = [];
+
+    //         foreach ($convs as $c) {
+    //             // fetch last message for this conversation
+    //             $messages = $this->twilio
+    //                 ->conversations
+    //                 ->v1
+    //                 ->conversations($c->sid)
+    //                 ->messages
+    //                 ->read([], 1); // only the latest one
+
+    //             $lastMessageDate = null;
+    //             if (!empty($messages)) {
+    //                 $lastMessageDate = $messages[0]->dateCreated->format('Y-m-d H:i:s');
+    //             }
+
+    //             $result[] = [
+    //                 'sid'            => $c->sid,
+    //                 'friendly_name'  => $c->friendlyName,
+    //                 'state'          => $c->state,
+    //                 'date_created'   => $c->dateCreated->format('Y-m-d H:i:s'),
+    //                 'last_message_at' => $lastMessageDate,
+    //             ];
+    //         }
+
+    //         return $result;
+    //     } catch (\Exception $e) {
+    //         return ['error' => $e->getMessage()];
+    //     }
+    // }
+
 
     /**
      * Get messages for one conversation
@@ -239,7 +305,7 @@ class WhatsappService
      */
     public function handleIncoming(Request $request)
     {
-        Log::info('WhatsApp webhook payload:', $request->all());
+        // Log::info('WhatsApp webhook payload:', $request->all());
 
         $userText = trim((string) $request->input('Body', ''));
         if ($userText === '') {
@@ -248,18 +314,25 @@ class WhatsappService
 
         // Normalise WhatsApp number and find Twilio Conversation SID
         $userNumber = str_replace('whatsapp:', '', (string) $request->input('From', ''));
-        $conversations = $this->getConversations();
-        $conversationSid = null;
-        foreach ($conversations as $conv) {
-            if (($conv['friendly_name'] ?? null) === $userNumber) {
-                $conversationSid = $conv['sid'];
-                break;
-            }
-        }
 
+        $conversation = ChatControll::where('contact', $userNumber)->first();
+        $conversationSid = $conversation->sid;
+        $conversation->update([
+            'last_message' => Carbon::now(),
+        ]);
         // Emit user message to your UI
         event(new MessageSent($userText, $conversationSid, 'user'));
 
+        // save user message to chat history
+        ChatHistory::create([
+            'conversation_sid' => $conversationSid,
+            'message' => $userText,
+            'sender' => 'user',]);
+        $chat_count = ChatControll::where('sid', $conversationSid)->first();
+        $chat_count->update([
+            'unread' => true,
+            'unread_count' => $chat_count->unread_count + 1,
+        ]);
         // if auto reply is off it will not call gpt api
         $chatControll = ChatControll::where('sid', $conversationSid)->first();
         if (!$chatControll->auto_reply) {
@@ -274,7 +347,21 @@ class WhatsappService
             // Send reply into your chat & WhatsApp
             $this->sendCustomMessage($conversationSid, $replyText);
             event(new MessageSent($replyText, $conversationSid, 'admin'));
+
+            // save admin message to chat history
+            ChatHistory::create([
+                'conversation_sid' => $conversationSid,
+                'message' => $replyText,
+                'sender' => 'system',]);
         } catch (\Throwable $e) {
+            $chat = ChatControll::where('sid', $conversationSid)->first();
+            $data = [
+                'first_name'  => $chat->first_name,
+                'last_name'   => $chat->last_name,
+                'contact'     => $chat->contact,
+            ];
+            Mail::to('Info@flettons.com')->send(new AssistantFailureMail($data));
+
             Log::error('Assistant error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
             $replyText = 'Please wait';
         }
@@ -359,7 +446,7 @@ class WhatsappService
      */
     protected function runAssistantAndGetReply(string $userNumber, string $userText): string
     {
-    
+
         // Get (or create) the OpenAI thread id using ONLY getOrCreateThreadId
         $threadId = $this->getOrCreateThreadId($userNumber);
 

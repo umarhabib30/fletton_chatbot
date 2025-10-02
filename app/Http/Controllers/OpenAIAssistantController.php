@@ -15,7 +15,7 @@ class OpenAIAssistantController extends Controller
     public function __construct()
     {
         $this->base = rtrim(env('OPENAI_BASE_URL', 'https://api.openai.com/v1'), '/');
-        $this->key  = env('OPENAI_API_KEY');
+        $this->key  = config('services.openai.key');
 
         $this->http = new Client([
             'base_uri' => $this->base . '/',

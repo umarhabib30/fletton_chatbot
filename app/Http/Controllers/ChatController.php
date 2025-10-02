@@ -11,9 +11,9 @@ class ChatController extends Controller
 {
     public function index()
     {
-        $watsAppService = new WhatsappService();
+        $conversations = ChatControll::orderBy('updated_at', 'desc')->get();
         $data = [
-            'conversations' => $watsAppService->getConversations(),
+            'conversations' => $conversations,
         ];
 
         return view('chats.index', $data);

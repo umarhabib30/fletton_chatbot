@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('login', [AuthController::class, 'index'])->name('login');
 Route::post('login', [AuthController::class, 'login'])->name('admin.login');
+Route::get('logout', [AuthController::class, 'logout'])->name('admin.logout');
 
 Route::group(['middleware' => ['auth']], function () {
     Route::get('/', [ChatController::class, 'index']);

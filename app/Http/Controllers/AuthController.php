@@ -19,6 +19,11 @@ class AuthController extends Controller
 
         return back()->withErrors([
             'email' => 'The provided credentials do not match our records.',
-        ]); 
+        ]);
+    }
+
+    public function logout(){
+        auth()->logout();
+        return redirect()->route('login');
     }
 }

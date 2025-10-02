@@ -10,6 +10,6 @@ class ChatControll extends Model
     use HasFactory;
 
     protected $fillable=[
-        'contact','sid','auto_reply','assistant_thread_id','assistant_metadata', 'first_name', 'last_name', 'email', 'address', 'postal_code',
+        'contact','sid','auto_reply','assistant_thread_id','assistant_metadata', 'first_name', 'last_name', 'email', 'address', 'postal_code','last_message', 'unread', 'unread_count',
     ];
 }
