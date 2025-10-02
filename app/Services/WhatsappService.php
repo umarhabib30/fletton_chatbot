@@ -155,7 +155,7 @@ class WhatsappService
                 'date_created' => Carbon::now()->toDateTimeString(),
             ]);
 
-            event(new MessageSent($$msg->body, $existingSid, 'admin'));
+            event(new MessageSent($msg->body, $existingSid, 'admin'));
             // 3) Create/seed the OpenAI thread using ONLY getOrCreateThreadId
             $this->getOrCreateThreadId($friendlyName, [
                 'first_name' => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $contact->first_name))),
