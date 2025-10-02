@@ -23,6 +23,7 @@ class ChatController extends Controller
     // ** first message to customer ** //
     public function sendTemplateMessage(Request $request)
     {
+        // dd($request);
         $watsAppService = new WhatsappService();
         $response = $watsAppService->sendWhatsAppMessage($request);
         return response()->json($response);

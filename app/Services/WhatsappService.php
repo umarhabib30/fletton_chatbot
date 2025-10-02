@@ -143,19 +143,19 @@ class WhatsappService
                     'postal_code' => $request->postal_code,
                     'unread' => true,
                     'unread_count' => 1,
-                    'unread_message' => $message,
+                    'unread_message' => $msg->body,
                 ]
             );
 
             ChatHistory::create([
                 'conversation_sid' => $existingSid,
                 'message_sid' => $msg->sid,
-                'body' => $message,
+                'body' => $msg->body,
                 'author' => 'system',
                 'date_created' => Carbon::now()->toDateTimeString(),
             ]);
 
-            event(new MessageSent($message, $existingSid, 'admin'));
+            event(new MessageSent($$msg->body, $existingSid, 'admin'));
             // 3) Create/seed the OpenAI thread using ONLY getOrCreateThreadId
             $this->getOrCreateThreadId($friendlyName, [
                 'first_name' => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $contact->first_name))),
