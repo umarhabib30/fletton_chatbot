@@ -11,7 +11,8 @@ class ChatHistory extends Model
     protected $fillable = [
         'conversation_sid',
         'message_sid',
-        'message',
-        'sender',
+        'body',
+        'author',
+        'date_created',
     ];
 }

@@ -15,8 +15,9 @@ return new class extends Migration
             $table->id();
             $table->string('conversation_sid');
             $table->string('message_sid')->nullable();
-            $table->string('message');
-            $table->string('sender');
+            $table->string('body');
+            $table->string('author');
+            $table->string('date_created')->nullable();
             $table->timestamps();
         });
     }
