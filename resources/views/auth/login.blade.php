@@ -27,10 +27,11 @@
     class="w-full max-w-[520px] min-h-[600px]  rounded-xl bg-[#1A202C] px-6 sm:px-10 py-10 shadow-xl flex flex-col justify-center">
     <!-- Brand -->
     <div class="mb-8 text-center">
-      <h1
+        <img src="{{ asset('assets/logo/FlettonsChat Logo Transparent.png') }}" alt="">
+      {{-- <h1
         class="text-4xl sm:text-5xl md:text-[65px] font-bold leading-none tracking-tight select-none">
         <span class="text-white">Flettons</span><span class="text-[#C1EC4A]">Chat</span>
-      </h1>
+      </h1> --}}
     </div>
 
     <!-- Form -->
