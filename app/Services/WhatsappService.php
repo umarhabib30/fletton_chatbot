@@ -155,7 +155,7 @@ class WhatsappService
                 'date_created' => Carbon::now()->toDateTimeString(),
             ]);
 
-            event(new MessageSent($msg->body, $existingSid, 'admin'));
+            event(new MessageSent($msg->body, $existingSid, 'system'));
             // 3) Create/seed the OpenAI thread using ONLY getOrCreateThreadId
             $this->getOrCreateThreadId($friendlyName, [
                 'first_name' => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $contact->first_name))),
@@ -358,14 +358,14 @@ class WhatsappService
     public function deleteConversation(string $conversationSid)
     {
         try {
-            $this
-                ->twilio
-                ->conversations
-                ->v1
-                ->conversations($conversationSid)
-                ->delete();
+            // $this
+            //     ->twilio
+            //     ->conversations
+            //     ->v1
+            //     ->conversations($conversationSid)
+            //     ->delete();
 
-            ChatControll::where('sid', $conversationSid)->delete();
+            // ChatControll::where('sid', $conversationSid)->delete();
             ChatHistory::where('conversation_sid', $conversationSid)->delete();
             return response()->json([
                 'success' => true,

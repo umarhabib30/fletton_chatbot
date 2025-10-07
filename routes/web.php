@@ -27,6 +27,7 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('autoreply/stop/{sid}', [ChatController::class, 'stopAutoReply']);
     Route::get('autoreply/resume/{sid}' , [ChatController::class, 'resumeAutoReply']);
     Route::get('chat/delete/{id}', [ChatController::class, 'deleteConversation']);
+    Route::get('contact/details/{sid}', [ChatController::class, 'getContactDetails'])->name('contact.details');
 
     Route::get('chats/sync', [ChatController::class, 'syncChats'])->name('chats.sync');
 });

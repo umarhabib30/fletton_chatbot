@@ -108,4 +108,9 @@ class ChatController extends Controller
         $watsAppService = new WhatsappService();
         return $watsAppService->deleteConversation($id);
     }
+
+    public function getContactDetails($sid){
+        $contact = ChatControll::where('sid', $sid)->first();
+        return response()->json($contact);
+    }
 }

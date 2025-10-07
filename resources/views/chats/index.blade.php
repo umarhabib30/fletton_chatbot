@@ -330,7 +330,8 @@
                         <div id="submenu" class="submenu hidden absolute bg-white shadow-lg rounded-lg p-2">
                             <ul>
                                 <a href="{{ route('admin.logout') }}">
-                                    <li class="hover:bg-gray-200 rounded-lg"><i class="fa fa-sign-out "></i> Log out</li>
+                                    <li class="hover:bg-gray-200 rounded-lg"><i class="fa fa-sign-out "></i> Log out
+                                    </li>
                                 </a>
                             </ul>
                         </div>
@@ -358,6 +359,7 @@
                     <button
                         class="contact-item relative w-full text-left px-4 py-3  wa-hover wa-border transition-colors duration-150 p-2 rounded-2xl"
                         sid="{{ $conversation->sid }}" data-name="{{ $conversation->contact }}"
+                        data-firstname="{{ $conversation->first_name }} {{ $conversation->last_name }}"
                         data-last-message="{{ $conversation->last_message_body ?? '' }}"
                         data-last-time="{{ $conversation->last_message }}">
                         <div class="flex items-start space-x-3">
@@ -365,10 +367,31 @@
                                 class="w-12 h-12 rounded-full object-cover flex-shrink-0" />
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-start justify-between ">
-                                    <h4 class="wa-text-primary truncate flex-1">{{ $conversation->contact }}</h4>
+                                    <h4 class="wa-text-primary truncate flex-1">
+                                        @if ($conversation->first_name)
+                                            {{ $conversation->first_name }} {{ $conversation->last_name }}
+                                        @else
+                                            {{ $conversation->contact }}
+                                        @endif
+                                    </h4>
+                                    @php
+                                        $lastMessageTime = Carbon\Carbon::parse($conversation->last_message);
+
+                                        if ($lastMessageTime->isToday()) {
+                                            $formattedTime = $lastMessageTime->format('g:i A'); // e.g., 3:45 PM
+                                        } elseif ($lastMessageTime->isYesterday()) {
+                                            $formattedTime = 'Yesterday';
+                                        } elseif ($lastMessageTime->greaterThanOrEqualTo(now()->subDays(7))) {
+                                            $formattedTime = $lastMessageTime->format('l'); // e.g., Monday, Tuesday
+                                        } else {
+                                            $formattedTime = $lastMessageTime->format('d/m/Y'); // e.g., 28/09/2023
+                                        }
+                                    @endphp
+
                                     <span class="text-xs wa-text-secondary ml-2 whitespace-nowrap">
-                                        {{ Carbon\Carbon::parse($conversation->last_message)->format('g:i A') }}
+                                        {{ $formattedTime }}
                                     </span>
+
                                 </div>
                                 <div class="flex items-center justify-between">
                                     <p class="text-sm wa-text-secondary truncate flex-1 last-message-preview"
@@ -395,7 +418,8 @@
                         <div class="hidden absolute right-7 top-15 -translate-y-1/2 bg-white shadow-lg rounded-xl py-1 z-50 chat-menu-dropdown px-2 py-2"
                             style="width: 45%;">
                             <ul>
-                                <li class="px-4 py-2  hover:bg-gray-100 cursor-pointer text-md  delete-chat-btn wa-text-primary rounded-lg">
+                                <li
+                                    class="px-4 py-2  hover:bg-gray-100 cursor-pointer text-md  delete-chat-btn wa-text-primary rounded-lg">
                                     <i class="fa fa-trash-o"></i> Delete chat
                                 </li>
                             </ul>
@@ -537,7 +561,8 @@
                 hour: 'numeric',
                 minute: '2-digit'
             });
-
+            // Update last message in contact list
+            updateLastMessage(data.sid, data.message);
             // Check if the received message is for the current conversation
             if (data.sid !== sid) return;
 
@@ -567,8 +592,6 @@
             // Append the new message to the messages area
             $('#messagesArea').append(messageHtml);
 
-            // Update last message in contact list
-            updateLastMessage(data.sid, data.message);
 
             // Move the contact-item whose sid matches the received message's sid to the top of the contact list
 
@@ -579,12 +602,79 @@
 
 
         function updateLastMessage(sid, message) {
+            console.log('Updating last message for SID:', sid, 'Message:', message);
             const $contact = $(`.contact-item[sid="${sid}"]`);
             if ($contact.length) {
                 $contact.find('.last-message-preview').text(message.substring(0, 40) + (message.length > 40 ? '...' : ''));
                 $contact.attr('data-last-message', message);
                 // Move to top of list
                 $contact.prependTo('#contactsList');
+            } else {
+
+                $.ajax({
+                    url: "{{ url('contact/details') }}/" + sid,
+                    type: 'GET',
+                    success: function(response) {
+                        console.log('Contact details response:', response);
+
+                        var newContactHtml = `
+                         <button
+                                class="contact-item relative w-full text-left px-4 py-3  wa-hover wa-border transition-colors duration-150 p-2 rounded-2xl"
+                                sid="${response.sid}" data-name="${response.contact}"
+                                data-firstname="${response.first_name} ${response.last_name}"
+                                data-last-message="${response.unread_message}"
+                                data-last-time="${response.last_message}">
+                                <div class="flex items-start space-x-3">
+                                    <img src="{{ asset('assets/images/profile.png') }}" alt="${response.contact}"
+                                        class="w-12 h-12 rounded-full object-cover flex-shrink-0" />
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-start justify-between ">
+                                            <h4 class="wa-text-primary truncate flex-1">
+                                                ${response.first_name ? response.first_name + ' ' + response.last_name : response.contact}
+                                            </h4>
+                                            <span class="text-xs wa-text-secondary ml-2 whitespace-nowrap">
+                                               ${new Date(response.last_message).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                            </span>
+
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <p class="text-sm wa-text-secondary truncate flex-1 last-message-preview"
+                                                title="${response.unread_message}">
+                                                ${response.unread_message ? response.unread_message.substring(0, 40) + (response.unread_message.length > 40 ? '...' : '') : 'No messages yet'}
+                                            </p>
+
+                                            <span class="unread-badge ml-2 ">${response.unread_count}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Action Menu Trigger -->
+                                <div
+                                    class="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition duration-150 chat-menu-trigger">
+                                    <i class="fa fa-chevron-down text-gray-500 cursor-pointer"></i>
+                                </div>
+
+                                <!-- Dropdown -->
+                                <div class="hidden absolute right-7 top-15 -translate-y-1/2 bg-white shadow-lg rounded-xl py-1 z-50 chat-menu-dropdown px-2 py-2"
+                                    style="width: 45%;">
+                                    <ul>
+                                        <li
+                                            class="px-4 py-2  hover:bg-gray-100 cursor-pointer text-md  delete-chat-btn wa-text-primary rounded-lg">
+                                            <i class="fa fa-trash-o"></i> Delete chat
+                                        </li>
+                                    </ul>
+                                </div>
+                            </button>
+                        `;
+
+                        $('#contactsList').prepend(newContactHtml);
+                    },
+                    error: function() {
+                        console.log('Error fetching contact details');
+                    }
+                });
+
+
             }
         }
 
@@ -730,12 +820,20 @@
 
             // Search filter
             $('#searchInput').on('input', function() {
-                const term = $(this).val().toLowerCase();
+                const term = $(this).val().toLowerCase().trim();
+
                 $('.contact-item').each(function() {
-                    const name = $(this).data('name').toLowerCase();
-                    const lastMsg = $(this).data('last-message').toLowerCase();
-                    $(this).toggle(name.includes(term) || lastMsg.includes(term));
+                    const name = ($(this).data('name') || '').toString().toLowerCase();
+                    const firstName = ($(this).data('firstname') || '').toString().toLowerCase();
+                    const lastMsg = ($(this).data('last-message') || '').toString().toLowerCase();
+
+                    $(this).toggle(
+                        name.includes(term) ||
+                        firstName.includes(term) ||
+                        lastMsg.includes(term)
+                    );
                 });
+
                 if (!term) $('.contact-item').show();
             }).on('keydown', function(e) {
                 if (e.key === 'Escape') {
@@ -743,6 +841,7 @@
                     $('.contact-item').show();
                 }
             });
+
 
             // Contact selection
             $('.contact-item').on('click', function() {
