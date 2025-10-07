@@ -358,14 +358,14 @@ class WhatsappService
     public function deleteConversation(string $conversationSid)
     {
         try {
-            // $this
-            //     ->twilio
-            //     ->conversations
-            //     ->v1
-            //     ->conversations($conversationSid)
-            //     ->delete();
+            $this
+                ->twilio
+                ->conversations
+                ->v1
+                ->conversations($conversationSid)
+                ->delete();
 
-            // ChatControll::where('sid', $conversationSid)->delete();
+            ChatControll::where('sid', $conversationSid)->delete();
             ChatHistory::where('conversation_sid', $conversationSid)->delete();
             return response()->json([
                 'success' => true,
