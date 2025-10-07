@@ -107,14 +107,11 @@ class WhatsappService
 
             $firstName = trim($request->first_name);
 
-            // Take only the first word in case both first & last name are entered
-            $firstName = explode(' ', $firstName)[0];
+            // Remove everything except letters and spaces
+            $firstName = preg_replace('/[^a-zA-Z ]/', '', $firstName);
 
-            // Remove symbols, keep only letters
-            $firstName = preg_replace('/[^a-zA-Z]/', '', $firstName);
-
-            // Make lowercase then capitalize first letter
-            $firstName = ucfirst(strtolower($firstName));
+            // Convert to proper case (capitalize each word)
+            $firstName = ucwords(strtolower($firstName));
 
             // 1) Send the (template) message
             $msg = $twilio
@@ -136,7 +133,7 @@ class WhatsappService
                 [
                     'contact' => $friendlyName,
                     'auto_reply' => true,
-                    'first_name' => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $request->first_name))),
+                    'first_name' => ucwords(strtolower(preg_replace('/[^a-zA-Z ]/', '', $request->first_name))),
                     'last_name' => preg_replace('/[^a-zA-Z]/', '', $request->last_name),
                     'email' => $request->email,
                     'address' => $request->address,
@@ -158,7 +155,7 @@ class WhatsappService
             event(new MessageSent($msg->body, $existingSid, 'system'));
             // 3) Create/seed the OpenAI thread using ONLY getOrCreateThreadId
             $this->getOrCreateThreadId($friendlyName, [
-                'first_name' => ucfirst(strtolower(preg_replace('/[^a-zA-Z]/', '', $contact->first_name))),
+                'first_name' => ucwords(strtolower(preg_replace('/[^a-zA-Z ]/', '', $contact->first_name))),
                 'last_name' => preg_replace('/[^a-zA-Z]/', '', $contact->last_name),
                 'email' => $contact->email,
                 'address' => $contact->address,
