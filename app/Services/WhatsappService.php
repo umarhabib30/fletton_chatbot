@@ -191,6 +191,14 @@ class WhatsappService
                     'body' => $message,
                 ]);
 
+             ChatHistory::create([
+                'conversation_sid' => $conversationSid,
+                'message_sid' => $msg->sid,
+                'body' => $message,
+                'author' => 'system',
+                'date_created' => Carbon::now()->toDateTimeString(),
+            ]);
+
             return response()->json([
                 'message' => 'Sent via Conversation',
                 'conversationSid' => $conversationSid,

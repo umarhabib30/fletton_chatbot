@@ -434,7 +434,8 @@
         <!-- Chat Pane -->
         <main id="chatPane" class="flex-1 flex flex-col md:flex">
             <!-- Chat Header -->
-            <div class="chat-header hidden  py-4 shadow-lg">
+            <!-- Chat Header -->
+            <div id="chat-header" class="chat-header hidden py-4 shadow-lg">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-3 flex-1 min-w-0">
                         <!-- Back (mobile only) -->
@@ -445,23 +446,44 @@
                                     d="M15 19l-7-7 7-7" />
                             </svg>
                         </button>
+
                         <img id="chatHeaderAvatar"
                             src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop&crop=face"
-                            class="w-10 h-10 rounded-full object-cover flex-shrink-0" alt="Avatar" />
-                        <div class="flex-1 min-w-0">
+                            class="w-10 h-10 rounded-full object-cover flex-shrink-0 open-infobox" alt="Avatar" />
+
+                        <div class="flex-1 min-w-0 open-infobox">
                             <h3 id="chatHeaderName" class="font-semibold wa-text-primary truncate">Chat</h3>
                             <p class="text-xs wa-text-secondary">online</p>
                             <input type="hidden" id="chat-sid" />
                         </div>
                     </div>
+
+                    <!-- RIGHT SIDE ACTIONS -->
                     <div class="flex items-center space-x-1">
-                        <button class="p-2 rounded-full wa-hover" title="Search">
+                        <!-- DESKTOP SEARCH AREA (inline) -->
+                        <div id="chatSearchAreaDesktop" class="hidden md:flex items-center space-x-2 relative">
+                            <!-- Hidden initially on desktop too -->
+                            <input id="chatSearchInputDesktop" type="text" placeholder="Search messages..."
+                                class="hidden border border-gray-300 rounded-full px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 transition w-56" />
+                            <button id="chatSearchCloseDesktop" class="hidden p-2 rounded-full wa-hover"
+                                title="Close">
+                                <i class="fa fa-close"></i>
+                            </button>
+                            <div id="chatSearchResultsDesktop"
+                                class="absolute top-full right-0 mt-2 w-72 bg-white shadow-lg rounded-lg hidden z-50 max-h-60 overflow-y-auto border border-gray-200">
+                            </div>
+                        </div>
+
+                        <!-- Search Button (works for both desktop & mobile) -->
+                        <button id="chatSearchBtn" class="p-2 rounded-full wa-hover" title="Search">
                             <svg class="w-5 h-5 wa-text-secondary" fill="none" stroke="currentColor"
                                 viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                         </button>
+
+                        <!-- Menu -->
                         <button class="p-2 rounded-full wa-hover" title="Menu">
                             <svg class="w-5 h-5 wa-text-secondary" fill="currentColor" viewBox="0 0 24 24">
                                 <path
@@ -470,7 +492,22 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- MOBILE SEARCH BAR (full width under header info) -->
+                <div id="chatSearchBarMobile" class="md:hidden hidden px-4 mt-3">
+                    <div class="flex items-center space-x-2">
+                        <input id="chatSearchInputMobile" type="text" placeholder="Search messages..."
+                            class="flex-1 border border-gray-300 rounded-full px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                        <button id="chatSearchCloseMobile" class="p-2 rounded-full wa-hover" title="Close">
+                            <i class="fa fa-close"></i>
+                        </button>
+                    </div>
+                    <div id="chatSearchResultsMobile"
+                        class="mt-2 w-full bg-white shadow-lg rounded-lg hidden z-50 max-h-60 overflow-y-auto border border-gray-200">
+                    </div>
+                </div>
             </div>
+
 
             <!-- Messages -->
             <div id="messagesArea"
@@ -478,7 +515,7 @@
             </div>
 
             <!-- Composer -->
-            <div class="chat-input hidden  p-3" style="background: #F5F1EB;">
+            <div id="chat-composer" class="chat-input hidden  p-3" style="background: #F5F1EB;">
                 <div class="flex items-end space-x-2 rounded-full focus:outline-none  border border-gray-200  px-2 bg-white shadow-lg"
                     style="padding-top:3px; padding-bottom:3px;">
                     <div class="flex items-center space-x-2 mb-1">
@@ -515,7 +552,6 @@
                     </button>
                 </div>
             </div>
-
         </main>
     </div>
 
@@ -528,8 +564,99 @@
         <img src="{{ asset('assets/icons/Loading.png') }}" class="loading-image" alt="Loading...">
     </div>
 
+
+    <!-- Contact Info Sidebar -->
+    <div id="contactSidebar"
+        class="fixed top-0 right-0 h-full bg-white border-l transform translate-x-full transition-transform duration-300 z-50 w-full md:w-1/4 ">
+        <!-- Full width mobile, wider on desktop -->
+
+        <!-- Header -->
+        <div class="flex items-center justify-between p-4 bg-white">
+            <button id="closeSidebar" class=" text-lg font-light"><i class="fa fa-close"></i> <span
+                    class="ml-3">Contact info</span></button>
+            {{-- <button class="text-teal-600 text-sm font-medium">Edit</button> --}}
+        </div>
+
+        <!-- Profile Section -->
+        <div class="bg-white p-6 text-center">
+            <img id="sidebarAvatar" src="{{ asset('assets/images/profile.png') }}"
+                class="w-32 h-32 rounded-full object-cover mx-auto mb-3">
+            <h2 id="sidebarName" class="text-xl font-semibold mb-1"></h2>
+            <p id="sidebarNumber" class="text-gray-500 text-sm"></p>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex gap-3 px-6 py-4 bg-white justify-center">
+            <button class="w-1/4 text-center border p-1 rounded-lg border-2">
+                <svg class="w-6 h-6 mx-auto text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z">
+                    </path>
+                </svg>
+                <span class="block mt-1 text-xs text-teal-600 font-medium">Message</span>
+            </button>
+
+            <button class="w-1/4 text-center border p-1 rounded-lg border-2">
+                <svg class="w-6 h-6 mx-auto text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                <span class="block mt-1 text-xs text-teal-600 font-medium">Search</span>
+            </button>
+        </div>
+
+        <!-- Status -->
+        <div class=" px-6 py-3 border-b">
+            <div class="flex items-center justify-between">
+                <p class="text-gray-600 text-sm">On the road.....</p>
+                <span class="text-gray-400 text-xs">26 Jul 2025</span>
+            </div>
+        </div>
+
+        <!-- Media / Starred -->
+        <div class="bg-white mt-2">
+            <button class="w-full flex items-center justify-between px-6 py-4 ">
+                <span class="text-gray-900"><i class="fa fa-folder-open-o mr-3"></i> Media, links and docs</span>
+                <span class="text-gray-500 text-sm">65</span>
+            </button>
+
+            <button class="w-full flex items-center justify-between px-6 py-4 ">
+                <span class="text-gray-900"><i class="fa fa-star-o mr-3"></i> Starred messages</span>
+                <span class="text-gray-500 text-sm">1</span>
+            </button>
+        </div>
+
+    </div>
+
+
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script>
+        // contact details tab
+        $(document).on('click', '.open-infobox', function() {
+            openContactInfo();
+        });
+
+        // Close Sidebar
+        $(document).on('click', '#closeSidebar', function() {
+            closeContactInfo();
+        });
+
+
+        function openContactInfo() {
+            $('#contactSidebar').removeClass('translate-x-full');
+            $('#chat-header').addClass('w-2/3');
+            $('#messagesArea').addClass('w-2/3');
+            $('#chat-composer').addClass('w-2/3');
+        }
+
+        function closeContactInfo() {
+            $('#chat-header').removeClass('w-2/3');
+            $('#messagesArea').removeClass('w-2/3');
+            $('#chat-composer').removeClass('w-2/3');
+            $('#contactSidebar').addClass('translate-x-full');
+        }
+
         function scrollToBottom() {
             var messagesArea = document.getElementById('messagesArea');
             messagesArea.scrollTop = messagesArea.scrollHeight;
@@ -851,10 +978,17 @@
                 $('.contact-item').removeClass('active');
                 $(this).addClass('active');
                 $(this).find('span.unread-badge').css('display', 'none');
-                const contactName = $(this).data('name');
+                const contactName = $(this).data('firstname');
                 const contactImg = $(this).find('img').attr('src');
                 const sid = $(this).attr('sid');
+                const contactNumber = $(this).data('name');
+
+
                 $('#chat-sid').val(sid);
+
+                // contact info box update
+                $('#sidebarName').text(contactName);
+                $('#sidebarNumber').text(contactNumber);
 
                 $('#chatHeaderName').text(contactName);
                 $('#chatHeaderAvatar').attr({
@@ -980,6 +1114,170 @@
                 hours = hours ? hours : 12;
                 return `${hours}:${minutes} ${ampm}`;
             }
+
+
+            // search in chat
+            // ===== Responsive In-Chat Search =====
+            (function() {
+                const isDesktop = () => window.matchMedia('(min-width: 768px)').matches;
+
+                function closeAllSearchUIs() {
+                    // Desktop
+                    $('#chatSearchInputDesktop').val('').addClass('hidden');
+                    $('#chatSearchCloseDesktop').addClass('hidden');
+                    $('#chatSearchResultsDesktop').addClass('hidden').empty();
+
+                    // Mobile
+                    $('#chatSearchBarMobile').addClass('hidden');
+                    $('#chatSearchInputMobile').val('');
+                    $('#chatSearchResultsMobile').addClass('hidden').empty();
+                }
+
+                // Toggle search on button click
+                $(document).on('click', '#chatSearchBtn', function() {
+                    if (isDesktop()) {
+                        // Desktop: inline input
+                        $('#chatSearchInputDesktop').toggleClass('hidden').focus();
+                        $('#chatSearchCloseDesktop').toggleClass('hidden');
+                        $('#chatSearchResultsDesktop').addClass('hidden').empty();
+                    } else {
+                        // Mobile: full width bar under header
+                        $('#chatSearchBarMobile').toggleClass('hidden');
+                        if (!$('#chatSearchBarMobile').hasClass('hidden')) {
+                            $('#chatSearchInputMobile').val('').focus();
+                            $('#chatSearchResultsMobile').addClass('hidden').empty();
+                        }
+                    }
+                });
+
+                // Close buttons
+                $(document).on('click', '#chatSearchCloseDesktop', function() {
+                    $('#chatSearchInputDesktop').addClass('hidden').val('');
+                    $('#chatSearchCloseDesktop').addClass('hidden');
+                    $('#chatSearchResultsDesktop').addClass('hidden').empty();
+                });
+                $(document).on('click', '#chatSearchCloseMobile', function() {
+                    $('#chatSearchBarMobile').addClass('hidden');
+                    $('#chatSearchInputMobile').val('');
+                    $('#chatSearchResultsMobile').addClass('hidden').empty();
+                });
+
+                // Helpers
+                function escapeHtml(s) {
+                    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+                }
+
+                function escapeRegExp(s) {
+                    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                }
+
+                function buildMatches(query) {
+                    const results = [];
+                    $('#messagesArea .wa-text-primary').each(function(i, el) {
+                        const full = $(el).text();
+                        const lower = full.toLowerCase();
+                        const idx = lower.indexOf(query);
+                        if (idx !== -1) {
+                            // Center snippet around first match
+                            const start = Math.max(0, idx - 30);
+                            const end = Math.min(full.length, idx + query.length + 50);
+                            const snippetRaw = full.slice(start, end);
+                            results.push({
+                                index: i,
+                                full,
+                                snippetRaw
+                            });
+                        }
+                    });
+                    return results;
+                }
+
+                function renderResults(query, $target) {
+                    $target.empty();
+                    if (!query) {
+                        $target.addClass('hidden');
+                        return;
+                    }
+
+                    const q = query.toLowerCase();
+                    const matches = buildMatches(q);
+
+                    if (!matches.length) {
+                        $target.html('<p class="text-gray-500 text-sm p-3">No matches found</p>').removeClass(
+                            'hidden');
+                        return;
+                    }
+
+                    const rx = new RegExp(escapeRegExp(query), 'ig');
+
+                    matches.forEach(m => {
+                        const esc = escapeHtml(m.snippetRaw);
+                        const highlighted = esc.replace(rx, (match) =>
+                            `<span class="bg-yellow-100">${escapeHtml(match)}</span>`);
+                        $target.append(`
+        <div class="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer" data-index="${m.index}">
+          ${highlighted}
+        </div>
+      `);
+                    });
+
+                    $target.removeClass('hidden');
+                }
+
+                // Input handlers (desktop & mobile)
+                $(document).on('input', '#chatSearchInputDesktop', function() {
+                    renderResults($(this).val().trim(), $('#chatSearchResultsDesktop'));
+                });
+                $(document).on('input', '#chatSearchInputMobile', function() {
+                    renderResults($(this).val().trim(), $('#chatSearchResultsMobile'));
+                });
+
+                // Click a suggestion (works for both result boxes)
+                $(document).on('click',
+                    '#chatSearchResultsDesktop div[data-index], #chatSearchResultsMobile div[data-index]',
+                    function() {
+                        const index = $(this).data('index');
+                        const $message = $('#messagesArea .wa-text-primary').eq(index);
+                        const $bubble = $message.closest('.relative'); // bubble wrapper
+                        const $container = $('#messagesArea');
+
+                        // Scroll into view
+                        $container.animate({
+                            scrollTop: $message.parent().offset().top - $container.offset().top +
+                                $container.scrollTop() - 100
+                        }, 400);
+
+                        // Remove prior overlays
+                        $('#messagesArea .highlight-overlay').remove();
+                        $bubble.addClass('overflow-hidden');
+
+                        // Add temporary gray shade overlay (Tailwind utilities only)
+                        const $overlay = $(
+                            '<span class="highlight-overlay absolute inset-0 rounded-lg bg-gray-300 bg-opacity-60 pointer-events-none"></span>'
+                            );
+                        $bubble.append($overlay);
+                        setTimeout(() => {
+                            $overlay.fadeOut(150, function() {
+                                $(this).remove();
+                            });
+                        }, 1200);
+
+                        // Hide result boxes
+                        $('#chatSearchResultsDesktop, #chatSearchResultsMobile').addClass('hidden').empty();
+                    });
+
+                // Hide results when clicking outside
+                $(document).on('click', function(e) {
+                    if (!$(e.target).closest('#chatSearchAreaDesktop, #chatSearchBarMobile').length) {
+                        $('#chatSearchResultsDesktop, #chatSearchResultsMobile').addClass('hidden');
+                    }
+                });
+
+                // On resize, close UIs to avoid layout glitches
+                $(window).on('resize', closeAllSearchUIs);
+            })();
+
         });
     </script>
 </body>
