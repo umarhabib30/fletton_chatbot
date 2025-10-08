@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Events\MessageSent;
 use App\Models\ChatControll;
+use App\Models\ChatHistory;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
 
@@ -112,5 +113,16 @@ class ChatController extends Controller
     public function getContactDetails($sid){
         $contact = ChatControll::where('sid', $sid)->first();
         return response()->json($contact);
+    }
+
+    public function star($id){
+        $chathistory = ChatHistory::find($id);
+        $chathistory->update([
+            'is_starred' => true,
+        ]);
+        return response()->json([
+            'success' => true,
+            'message' => 'Message starred id :' . $id,
+        ]);
     }
 }

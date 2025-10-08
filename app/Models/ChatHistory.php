@@ -14,5 +14,6 @@ class ChatHistory extends Model
         'body',
         'author',
         'date_created',
+        'is_starred',
     ];
 }

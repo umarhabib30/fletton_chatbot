@@ -628,6 +628,14 @@
 
     </div>
 
+    {{-- action button for the star --}}
+    <div id="messageActionMenu" class="fixed bg-white shadow-lg rounded-xl py-2 w-60 hidden z-50 border">
+        <ul class="text-sm text-gray-700">
+            <li class="menu-item px-4 py-2 hover:bg-gray-100 cursor-pointer" data-action="copy">📋 Copy</li>
+            <li class="menu-item px-4 py-2 hover:bg-gray-100 cursor-pointer" data-action="star">⭐ Star</li>
+
+        </ul>
+    </div>
 
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
@@ -699,7 +707,7 @@
             <div class="flex items-end space-x-2">
                 <img src="${contactImg}" alt="Contact" class="w-8 h-8 rounded-full flex-shrink-0" />
                 <div class="relative wa-bg-message-in rounded-lg px-3 py-2 max-w-md shadow-sm message-tail-in">
-                    <p class="wa-text-primary text-sm break-words">${data.message}</p>
+                    <p class="wa-text-primary text-sm break-words mr-3">${data.message}</p>
                     <p class="text-xs wa-text-secondary text-right mt-1">${currenttime}</p>
                 </div>
             </div>`;
@@ -707,7 +715,7 @@
                 messageHtml = `
             <div class="flex items-end justify-end space-x-2">
                 <div class="relative wa-bg-message-out rounded-lg px-3 py-2 max-w-md shadow-sm message-tail-out">
-                    <p class="wa-text-primary text-sm break-words whitespace-pre-wrap">${data.message}</p>
+                    <p class="wa-text-primary text-sm break-words whitespace-pre-wrap mr-3">${data.message}</p>
                     <p class="text-xs wa-text-secondary text-right mt-1">
                         ${currenttime}
                         <svg class="w-4 h-4 inline-block ml-1" fill="currentColor" viewBox="0 0 16 15"><path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"/></svg>
@@ -718,11 +726,6 @@
 
             // Append the new message to the messages area
             $('#messagesArea').append(messageHtml);
-
-
-            // Move the contact-item whose sid matches the received message's sid to the top of the contact list
-
-
             // Scroll to the bottom of the chat window
             scrollToBottom();
         });
@@ -800,8 +803,6 @@
                         console.log('Error fetching contact details');
                     }
                 });
-
-
             }
         }
 
@@ -886,6 +887,7 @@
 
 
         $(document).ready(function() {
+
             var $app = $('#app');
             var $overlay = $('#overlay');
 
@@ -1019,11 +1021,15 @@
                                     html = `
                                         <div class="flex items-end justify-end space-x-2">
                                             <div class="relative wa-bg-message-out rounded-lg px-3 py-2 max-w-md shadow-sm message-tail-out">
-                                                <p class="wa-text-primary text-sm break-words whitespace-pre-wrap">${message.body}</p>
+                                                <p class="wa-text-primary text-sm break-words whitespace-pre-wrap mr-3">${message.body}</p>
                                                 <p class="text-xs wa-text-secondary text-right mt-1">
+                                                    ${message.is_starred ? '<i class="fa fa-star text-sm"></i>' : ''}
                                                     ${formatDate(message.date_created)}
                                                     <svg class="w-4 h-4 inline-block ml-1" fill="currentColor" viewBox="0 0 16 15"><path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"/></svg>
                                                 </p>
+                                                 <button data-messageid=${message.id} class="message-menu-btn absolute top-1 right-1 text-gray-500 opacity-0 hover:opacity-100">
+                                                    <i class="fa fa-chevron-down"></i>
+                                                  </button>
                                             </div>
                                         </div>`;
                                 } else {
@@ -1031,8 +1037,11 @@
                                         <div class="flex items-end space-x-2">
                                             <img src="${contactImg}" alt="${contactName}" class="w-8 h-8 rounded-full flex-shrink-0" />
                                             <div class="relative wa-bg-message-in rounded-lg px-3 py-2 max-w-md shadow-sm message-tail-in">
-                                                <p class="wa-text-primary text-sm break-words">${message.body}</p>
-                                                <p class="text-xs wa-text-secondary text-right mt-1">${formatDate(message.date_created)}</p>
+                                                <p class="wa-text-primary text-sm break-words mr-3">${message.body}</p>
+                                                <p class="text-xs wa-text-secondary text-right mt-1"> ${message.is_starred ? '<i class="fa fa-star text-sm"></i>' : ''}   ${formatDate(message.date_created)}</p>
+                                                  <button data-messageid=${message.id} class="message-menu-btn absolute top-1 right-1 text-gray-500 opacity-0 hover:opacity-100">
+                                                    <i class="fa fa-chevron-down"></i>
+                                                  </button>
                                             </div>
                                         </div>`;
                                 }
@@ -1070,7 +1079,7 @@
                 const html = `
                     <div class="flex items-end justify-end space-x-2">
                         <div class="relative wa-bg-message-out rounded-lg px-3 py-2 max-w-md shadow-sm message-tail-out">
-                            <p class="wa-text-primary text-sm break-words">${message}</p>
+                            <p class="wa-text-primary text-sm break-words ">${message}</p>
                             <p class="text-xs wa-text-secondary text-right mt-1">
                                 ${currenttime}
                                 <svg class="w-4 h-4 inline-block ml-1" fill="currentColor" viewBox="0 0 16 15"><path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512z"/></svg>
@@ -1216,10 +1225,10 @@
                         const highlighted = esc.replace(rx, (match) =>
                             `<span class="bg-yellow-100">${escapeHtml(match)}</span>`);
                         $target.append(`
-        <div class="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer" data-index="${m.index}">
-          ${highlighted}
-        </div>
-      `);
+                            <div class="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer" data-index="${m.index}">
+                            ${highlighted}
+                            </div>
+                        `);
                     });
 
                     $target.removeClass('hidden');
@@ -1255,7 +1264,7 @@
                         // Add temporary gray shade overlay (Tailwind utilities only)
                         const $overlay = $(
                             '<span class="highlight-overlay absolute inset-0 rounded-lg bg-gray-300 bg-opacity-60 pointer-events-none"></span>'
-                            );
+                        );
                         $bubble.append($overlay);
                         setTimeout(() => {
                             $overlay.fadeOut(150, function() {
@@ -1277,6 +1286,54 @@
                 // On resize, close UIs to avoid layout glitches
                 $(window).on('resize', closeAllSearchUIs);
             })();
+
+
+            let selectedMessageText = "";
+            let selectedMessageBubble = null;
+
+            $(document).on('click', '.message-menu-btn', function(e) {
+                e.stopPropagation(); // prevent closing immediately
+
+                selectedMessageBubble = $(this).closest('.relative');
+                selectedMessageText = selectedMessageBubble.find('.wa-text-primary').text();
+
+                const offset = $(this).offset();
+                const menu = $('#messageActionMenu');
+
+                menu.css({
+                    top: offset.top + 20 + 'px',
+                    left: offset.left - 150 + 'px'
+                }).removeClass('hidden');
+            });
+
+            $(document).on('click', '.menu-item', function() {
+                const action = $(this).data('action');
+                $('#messageActionMenu').addClass('hidden');
+
+                if (action === 'copy') {
+                    navigator.clipboard.writeText(selectedMessageText);
+                    toastr.success("Message Copied!");
+                } else if (action === 'star') {
+                    const messageId = selectedMessageBubble.find('.message-menu-btn').data('messageid');
+                    $.ajax({
+                        url : "{{ url('message/star') }}/" + messageId,
+                        type : "GET",
+                        success:function(response){
+                            toastr.success("Message starred");
+                        },error:function(error){
+
+                        }
+                    });
+                } else if (action === 'delete') {
+                    selectedMessageBubble.closest('.flex').remove();
+                }
+                // you can expand reply/pin/react...
+            });
+
+            $(document).on('click', function() {
+                $('#messageActionMenu').addClass('hidden');
+            });
+
 
         });
     </script>

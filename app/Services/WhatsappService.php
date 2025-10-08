@@ -301,10 +301,12 @@ class WhatsappService
 
             $msgs = ChatHistory::where('conversation_sid', $conversationSid)
                 ->orderBy('date_created', 'asc')
-                ->get(['message_sid', 'author', 'body', 'date_created']);
+                ->get(['id','message_sid', 'author', 'body', 'date_created', 'is_starred']);
 
             return $msgs->map(function ($m) {
                 return [
+                    'id' => $m->id,
+                    'is_starred' => $m->is_starred,
                     'sid' => $m->message_sid,  // matches Twilio 'sid'
                     'author' => $m->author,
                     'body' => $m->body,

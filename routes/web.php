@@ -29,6 +29,8 @@ Route::group(['middleware' => ['auth']], function () {
     Route::get('chat/delete/{id}', [ChatController::class, 'deleteConversation']);
     Route::get('contact/details/{sid}', [ChatController::class, 'getContactDetails'])->name('contact.details');
 
+    Route::get('message/star/{id}',[ChatController::class, 'star'])->name('message.star');
+
     Route::get('chats/sync', [ChatController::class, 'syncChats'])->name('chats.sync');
 });
 
