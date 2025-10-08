@@ -439,12 +439,12 @@ class WhatsappService
             event(new MessageSent($replyText, $conversationSid, 'admin'));
 
             // save admin message to chat history
-            ChatHistory::create([
-                'conversation_sid' => $conversationSid,
-                'body' => $replyText,
-                'author' => 'system',
-                'date_created' => Carbon::now()->toDateTimeString(),
-            ]);
+            // ChatHistory::create([
+            //     'conversation_sid' => $conversationSid,
+            //     'body' => $replyText,
+            //     'author' => 'system',
+            //     'date_created' => Carbon::now()->toDateTimeString(),
+            // ]);
 
             $chatControll->update([
                 'unread' => true,
