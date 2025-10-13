@@ -1,6 +1,8 @@
 @extends('layouts.admin')
 @section('style')
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.19/css/intlTelInput.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.6-rc.0/css/select2.min.css" rel="stylesheet" />
+
     <style>
         .telephone-field {
             position: relative
@@ -16,10 +18,19 @@
             /* room for flag */
         }
 
+        /* search able select css start */
+        .select2-container .select2-selection--single {
+            height: 38px !important;
+        }
+
+        .select2-container--default .select2-selection--single {
+            border: 1px solid #ccc !important;
+            border-radius: 0px !important;
+        }
+
+
 
         /* loading */
-
-
         /* Overlay Background */
         .overlay {
             position: fixed;
@@ -71,6 +82,33 @@
                     <form id="sendTemplateForm" action="{{ url('admin/send-teplate/store') }}" method="POST">
                         @csrf
                         <div class="row">
+                            <div class="form-group col-md-6">
+                                <label for="old_customer">Select old customer</label>
+                                <select id="old_customer" class="form-control select2">
+                                    <option value="">---Select an older customer---</option>
+                                    @foreach ($users as $user)
+                                        <option value="{{ $user->id }}" data-first_name="{{ $user->first_name }}"
+                                            data-last_name="{{ $user->last_name }}" data-email="{{ $user->email }}"
+                                            data-address="{{ $user->address }}" data-postal_code="{{ $user->postal_code }}"
+                                            data-phone="{{ $user->contact }}">
+                                            {{ $user->first_name }} {{ $user->last_name }} ({{ $user->contact }})
+                                        </option>
+                                    @endforeach
+                                </select>
+
+                            </div>
+                            <div class="form-group col-md-6">
+                                <label for="template_id">Select Template</label>
+                                <select name="template_id" id="template_id" class="form-control" required>
+                                    <option value="">---Select Message Template---</option>
+                                    @foreach ($templates as $template)
+                                        <option value="{{ $template->template_id }}">{{ $template->title }} </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+
                             <!-- First Name -->
                             <div class="form-group col-md-6">
                                 <label for="first_name">First Name</label>
@@ -115,15 +153,7 @@
                                     value="{{ old('postal_code') }}" required readonly>
                             </div>
 
-                            <div class="form-group col-md-6">
-                                <label for="template_id">Select Template</label>
-                                <select name="template_id" id="template_id" class="form-control" required>
-                                    <option value="">---Select Message Template---</option>
-                                    @foreach ($templates as $template)
-                                        <option value="{{ $template->template_id }}">{{ $template->title }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
+
                         </div>
 
                         <button id="submitBtn" type="" class="btn btn-primary mt-3">
@@ -194,7 +224,7 @@
                 if (template_id.val().trim() === '') return showError(template_id,
                     'Please select a template');
 
-                 $('#overlay').show();
+                $('#overlay').show();
                 // ✅ All Good → Submit Form
                 $('#sendTemplateForm').submit();
             });
@@ -400,4 +430,77 @@
     <script async defer
         src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA7xLp13hLBGIDOt4BIJZrJF99ItTsya0g&libraries=places&callback=initAddressAutocomplete">
     </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.6-rc.0/js/select2.min.js"></script>
+   <script>
+    $(function () {
+        // your existing init
+        if (!$.fn.select2) {
+            console.error('Select2 failed to load');
+            return;
+        }
+        $('.select2').select2({
+            placeholder: 'Select',
+            allowClear: true,
+            width: '100%'
+        });
+
+        // helper to clear fields
+        function clearFormFields() {
+            $('#first_name').val('');
+            $('#last_name').val('');
+            $('#email').val('');
+            $('#address').val('');
+            $('#postal_code').val('');
+            if (window.iti && typeof window.iti.setNumber === 'function') {
+                window.iti.setNumber(''); // intl-tel-input
+            } else {
+                $('#phone').val('');
+            }
+            $('#phone').removeClass('is-invalid').data('phone-valid', ''); // reset validation flag
+        }
+
+        // when an option is selected
+        $('#old_customer').on('select2:select', function (e) {
+            const el = e.params.data.element;
+            const $opt = $(el);
+
+            const firstName  = $opt.data('first_name')  || '';
+            const lastName   = $opt.data('last_name')   || '';
+            const email      = $opt.data('email')       || '';
+            const address    = $opt.data('address')     || '';
+            const postalCode = $opt.data('postal_code') || '';
+            const phone      = ($opt.data('phone') || '').toString().trim();
+
+            // Fill simple fields
+            $('#first_name').val(firstName);
+            $('#last_name').val(lastName);
+            $('#email').val(email);
+            $('#address').val(address);
+            $('#postal_code').val(postalCode);
+
+            // Fill phone (respecting intl-tel-input if loaded)
+            if (window.iti && typeof window.iti.setNumber === 'function' && phone) {
+                // setNumber accepts E.164 like +441234567890; if your stored number
+                // lacks +country code, iti will try to parse based on current country
+                window.iti.setNumber(phone);
+            } else {
+                $('#phone').val(phone);
+            }
+
+            // remove any previous invalid state
+            $('#phone').removeClass('is-invalid').data('phone-valid', '1');
+        });
+
+        // when cleared (allowClear: true)
+        $('#old_customer').on('select2:clear', function () {
+            clearFormFields();
+        });
+
+        // also handle manual change to the placeholder option
+        $('#old_customer').on('change', function () {
+            if (!$(this).val()) clearFormFields();
+        });
+    });
+</script>
+
 @endsection

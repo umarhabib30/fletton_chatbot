@@ -42,8 +42,8 @@ class SendTemplateController extends Controller
             'title' => 'Send Message',
             'active' => 'messages',
             'templates' => MessageTemplate::all(),
+            'users' => ChatControll::where('is_blocked', false)->get(),
         ];
-
         return view('admin.send-message.index', $data);
     }
 
