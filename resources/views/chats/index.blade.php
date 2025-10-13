@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chat Application — WhatsApp-like</title>
+    <link rel="icon" type="image/x-icon" href="{{ asset('assets/logo/logo.png') }}">
+    <title>Flettons Chatbot</title>
 
     <!-- TailwindCSS v2 CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
@@ -53,7 +54,7 @@
         /* app container */
         .wa-bg-message-in {
             background: #ffffff;
-            border: 1px solid #e6e6e6;
+            /* border: 1px solid #e6e6e6; */
         }
 
         .wa-bg-message-out {
@@ -97,7 +98,7 @@
             border-width: 0 14px 10px 0;
             border-color: transparent #ffffff transparent transparent;
             /* add a subtle border to match incoming bubble border */
-            filter: drop-shadow(-1px 0 0 #e6e6e6);
+            /* filter: drop-shadow(-1px 0 0 #e6e6e6); */
         }
 
         .message-tail-out::before {
@@ -149,6 +150,16 @@
             #app.is-chat-open #chatPane {
                 display: flex;
             }
+
+            .wa-bg-message-out {
+                max-width: 80%;
+            }
+
+            .wa-bg-message-in {
+                max-width: 80%;
+            }
+
+
         }
 
         /* Custom scrollbar for desktop */
@@ -290,6 +301,34 @@
                 transform: rotate(360deg);
             }
         }
+
+        /* message pop up css */
+        @media (max-width: 767px) {
+            #messageActionMenu {
+                width: 90%;
+                border-radius: 14px;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            }
+        }
+
+        #messageActionMenu {
+            transform-origin: top left;
+            transition: transform 0.15s ease, opacity 0.15s ease;
+            opacity: 0;
+            transform: scale(0.95);
+        }
+
+        #messageActionMenu:not(.hidden) {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* starred drawer */
+        @media (max-width: 767px) {
+            #starredList .max-w-\[85\%\] {
+                max-width: 92%;
+            }
+        }
     </style>
 </head>
 
@@ -329,10 +368,15 @@
                         <!-- Submenu -->
                         <div id="submenu" class="submenu hidden absolute bg-white shadow-lg rounded-lg p-2">
                             <ul>
+                                <a href="{{ route('admin.dashboard') }}">
+                                    <li class="hover:bg-gray-200 rounded-lg"><i class="fa fa-dashboard "></i> Dashboard
+                                    </li>
+                                </a>
                                 <a href="{{ route('admin.logout') }}">
                                     <li class="hover:bg-gray-200 rounded-lg"><i class="fa fa-sign-out "></i> Log out
                                     </li>
                                 </a>
+
                             </ul>
                         </div>
 
@@ -418,6 +462,15 @@
                         <div class="hidden absolute right-7 top-15 -translate-y-1/2 bg-white shadow-lg rounded-xl py-1 z-50 chat-menu-dropdown px-2 py-2"
                             style="width: 45%;">
                             <ul>
+                                <li class="px-4 py-2  hover:bg-gray-100 cursor-pointer text-md  block-chat-btn wa-text-primary rounded-lg"
+                                    data-name="{{ $conversation->name }}">
+                                    <i class="fa fa-ban"></i>
+                                    @if ($conversation->is_blocked)
+                                        Unblock
+                                    @else
+                                        Block
+                                    @endif
+                                </li>
                                 <li
                                     class="px-4 py-2  hover:bg-gray-100 cursor-pointer text-md  delete-chat-btn wa-text-primary rounded-lg">
                                     <i class="fa fa-trash-o"></i> Delete chat
@@ -514,6 +567,18 @@
                 class="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 scrollbar-hide custom-scrollbar chat-bg-pattern">
             </div>
 
+            <div id="chat-blocked-banner"
+                class="hidden py-4 text-center text-gray-600 text-sm border-t border-gray-200 bg-white">
+                <span class="flex items-center justify-center space-x-2">
+                    <i class="fa fa-ban text-gray-500"></i>
+                    <span>You blocked this contact</span>
+                </span>
+                <button id="unblockBtn"
+                    class="mt-2 px-4 py-1 border border-green-500 text-green-600 rounded-full text-sm hover:bg-green-50 block-chat-btn">
+                    Unblock
+                </button>
+            </div>
+
             <!-- Composer -->
             <div id="chat-composer" class="chat-input hidden  p-3" style="background: #F5F1EB;">
                 <div class="flex items-end space-x-2 rounded-full focus:outline-none  border border-gray-200  px-2 bg-white shadow-lg"
@@ -587,7 +652,7 @@
 
         <!-- Action Buttons -->
         <div class="flex gap-3 px-6 py-4 bg-white justify-center">
-            <button class="w-1/4 text-center border p-1 rounded-lg border-2">
+            <button class="w-1/4 text-center border p-1 rounded-lg border-2" id="startmessage">
                 <svg class="w-6 h-6 mx-auto text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z">
@@ -596,7 +661,7 @@
                 <span class="block mt-1 text-xs text-teal-600 font-medium">Message</span>
             </button>
 
-            <button class="w-1/4 text-center border p-1 rounded-lg border-2">
+            <button class="w-1/4 text-center border p-1 rounded-lg border-2" id="chatSearchBtn2">
                 <svg class="w-6 h-6 mx-auto text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
@@ -617,22 +682,47 @@
         <div class="bg-white mt-2">
             <button class="w-full flex items-center justify-between px-6 py-4 ">
                 <span class="text-gray-900"><i class="fa fa-folder-open-o mr-3"></i> Media, links and docs</span>
-                <span class="text-gray-500 text-sm">65</span>
+                <span class="text-gray-500 text-sm">0</span>
             </button>
 
-            <button class="w-full flex items-center justify-between px-6 py-4 ">
+            <button id="openStarredBtn" class="w-full flex items-center justify-between px-6 py-4 ">
                 <span class="text-gray-900"><i class="fa fa-star-o mr-3"></i> Starred messages</span>
-                <span class="text-gray-500 text-sm">1</span>
+                <span id="starredCount" class="text-gray-500 text-sm">0</span>
             </button>
         </div>
-
     </div>
+
+    <!-- Starred Messages Drawer -->
+    <div id="starredSidebar"
+        class="fixed top-0 right-0 h-full w-full md:w-1/4 z-50 bg-white border-l transform translate-x-full transition-transform duration-300 flex flex-col"
+        style="background:#f7f5f3">
+
+        <!-- Header (non-scrolling) -->
+        <div class="flex items-center justify-between p-4 bg-white border-b"
+            style="padding-top:22px; padding-bottom:22px;">
+            <button id="backToInfo" class="text-lg font-light">
+                <i class="fa fa-angle-left"></i>
+                <span class="ml-2">Starred messages</span>
+            </button>
+            <button id="closeStarred" class="text-gray-500"><i class="fa fa-close"></i></button>
+        </div>
+
+        <!-- Scrollable list -->
+        <div id="starredList" class="flex-1 overflow-y-auto custom-scrollbar px-4">
+            <!-- filled by JS -->
+        </div>
+    </div>
+
+
+
 
     {{-- action button for the star --}}
     <div id="messageActionMenu" class="fixed bg-white shadow-lg rounded-xl py-2 w-60 hidden z-50 border">
         <ul class="text-sm text-gray-700">
-            <li class="menu-item px-4 py-2 hover:bg-gray-100 cursor-pointer" data-action="copy">📋 Copy</li>
-            <li class="menu-item px-4 py-2 hover:bg-gray-100 cursor-pointer" data-action="star">⭐ Star</li>
+            <li class="menu-item px-4 py-2 hover:bg-gray-100 cursor-pointer" data-action="copy"><i
+                    class="fa fa-copy"></i> Copy</li>
+            <li class="menu-item px-4 py-2 hover:bg-gray-100 cursor-pointer" data-action="star"><i
+                    class="fa fa-star-o"></i> Star</li>
 
         </ul>
     </div>
@@ -656,14 +746,26 @@
             $('#chat-header').addClass('w-2/3');
             $('#messagesArea').addClass('w-2/3');
             $('#chat-composer').addClass('w-2/3');
+            $('#chat-blocked-banner').addClass('w-2/3');
+            refreshStarredCountFromDOM();
         }
 
         function closeContactInfo() {
             $('#chat-header').removeClass('w-2/3');
             $('#messagesArea').removeClass('w-2/3');
             $('#chat-composer').removeClass('w-2/3');
+            $('#chat-blocked-banner').removeClass('w-2/3');
             $('#contactSidebar').addClass('translate-x-full');
         }
+
+        function refreshStarredCountFromDOM() {
+            const count = $('#messagesArea p.text-xs .fa-star').length;
+            const $count = $('#starredCount');
+            if ($count.length) $count.text(count);
+        }
+
+
+
 
         function scrollToBottom() {
             var messagesArea = document.getElementById('messagesArea');
@@ -680,15 +782,23 @@
         channel.bind('my-event', function(data) {
             console.log('Received data:', data);
             const $contact = $(`.contact-item[sid="${data.sid}"]`);
+
             if ($contact.length) {
-                $contact.find('.last-message-preview').text(data.message.substring(0, 40) + (data.message.length >
-                    40 ? '...' : ''));
-                $contact.find('span.unread-badge').css('display', 'block');
-                $contact.find('span.unread-badge').text(function(i, oldText) {
-                    return oldText === '' ? '1' : (parseInt(oldText) + 1).toString();
-                }).removeClass('hidden');
+                $contact.find('.last-message-preview').text(
+                    data.message.substring(0, 40) + (data.message.length > 40 ? '...' : '')
+                );
+
+                // ✅ Only increment unread count for incoming user messages
+                if (data.sender === 'user') {
+                    $contact.find('span.unread-badge').css('display', 'block');
+                    $contact.find('span.unread-badge').text(function(i, oldText) {
+                        return oldText === '' ? '1' : (parseInt(oldText) + 1).toString();
+                    }).removeClass('hidden');
+                }
+
                 $contact.prependTo('#contactsList');
             }
+
 
             var contactImg = $('#user_profile').val();
             var sid = $('#chat-sid').val();
@@ -788,6 +898,11 @@
                                 <div class="hidden absolute right-7 top-15 -translate-y-1/2 bg-white shadow-lg rounded-xl py-1 z-50 chat-menu-dropdown px-2 py-2"
                                     style="width: 45%;">
                                     <ul>
+                                          <li class="px-4 py-2  hover:bg-gray-100 cursor-pointer text-md  block-chat-btn wa-text-primary rounded-lg"
+                                            data-name="${conversation.name}" >
+                                            <i class="fa fa-ban"></i>
+                                            Block
+                                        </li>
                                         <li
                                             class="px-4 py-2  hover:bg-gray-100 cursor-pointer text-md  delete-chat-btn wa-text-primary rounded-lg">
                                             <i class="fa fa-trash-o"></i> Delete chat
@@ -824,6 +939,91 @@
                 $dropdown.show();
             }
         });
+
+        // block chat
+        $(document).on('click', '.block-chat-btn', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+
+            var $contact = $(this).closest('.contact-item');
+            var sid = $contact.attr('sid');
+            var contactName = $contact.data('name');
+            var isBlocked = $(this).text().trim() === 'Unblock'; // Check current label
+
+            if (!sid || !contactName) {
+                sid = $('#chat-sid').val();
+                contactName = $('#chatHeaderName').text().trim();
+                isBlocked = 'Unblock';
+            }
+
+            Swal.fire({
+                title: `${isBlocked ? 'Unblock' : 'Block'} chat with ${contactName}?`,
+                text: isBlocked ? "They will be able to message you again." :
+                    "They won't be able to message you.",
+                showCancelButton: true,
+                reverseButtons: true,
+                customClass: {
+                    popup: 'rounded-2xl p-6',
+                    title: 'text-lg font-semibold text-gray-800',
+                    htmlContainer: 'text-sm text-gray-600',
+                    confirmButton: 'swal2-delete-btn',
+                    cancelButton: 'swal2-cancel-btn'
+                },
+                buttonsStyling: false,
+                confirmButtonText: isBlocked ? 'Unblock' : 'Block',
+                cancelButtonText: 'Cancel'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    $.ajax({
+                        url: "{{ url('chat/block') }}/" + sid,
+                        method: 'GET',
+                        success: function(response) {
+                            console.log(response);
+                            if (response.success) {
+                                // ✅ Update button text instantly
+                                const $btn = $(`.contact-item[sid="${sid}"] .block-chat-btn`);
+                                $btn.html(
+                                    `<i class="fa fa-ban"></i> ${response.blocked ? 'Unblock' : 'Block'}`
+                                );
+
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: response.message,
+                                    timer: 1500,
+                                    showConfirmButton: false
+                                });
+
+                                // ✅ Only update UI if the currently opened chat matches this SID
+                                if ($('#chat-sid').val() === sid) {
+
+                                    // ✅ If now blocked → show banner, hide composer
+                                    if (response.blocked) {
+                                        $('#chat-blocked-banner').removeClass('hidden');
+                                        $('.chat-input').addClass('hidden');
+                                    }
+
+                                    // ✅ If now unblocked → show composer, hide banner
+                                    else {
+                                        $('#chat-blocked-banner').addClass('hidden');
+                                        $('.chat-input').removeClass('hidden');
+                                    }
+                                }
+
+
+                            } else {
+                                Swal.fire('Error', response.error || 'Unknown error', 'error');
+                            }
+                        },
+                        error: function() {
+                            Swal.fire('Error', 'Error updating block status!', 'error');
+                        }
+                    });
+                }
+            });
+        });
+
+
+
         // Delete handler
         $(document).on('click', '.delete-chat-btn', function(e) {
             e.stopPropagation();
@@ -976,6 +1176,7 @@
             $('.contact-item').on('click', function() {
                 if ($('.chat-menu-trigger:hover').length) return; // ignore if menu trigger is clicked
                 if ($('.delete-chat-btn:hover').length) return; // ignore if menu trigger is clicked
+                if ($('.block-chat-btn:hover').length) return; // ignore if menu trigger is clicked
 
                 $('.contact-item').removeClass('active');
                 $(this).addClass('active');
@@ -1011,7 +1212,15 @@
                             $('#pause_autoreply').addClass('hidden');
                             $('#resume_autoreply').removeClass('hidden');
                         }
-                        $('.chat-header, .chat-input').removeClass('hidden');
+
+                        if (data.blocked) {
+                            $('.chat-input').addClass('hidden');
+                            $('#chat-blocked-banner').removeClass('hidden');
+                        } else {
+                            $('#chat-blocked-banner').addClass('hidden');
+                            $('.chat-input').removeClass('hidden');
+                        }
+                        $('.chat-header').removeClass('hidden');
                         const $messages = $('#messagesArea');
                         $messages.empty();
                         if (data.messages && data.messages.length > 0) {
@@ -1159,6 +1368,29 @@
                     }
                 });
 
+                // Toggle search on button click
+                $(document).on('click', '#chatSearchBtn2', function() {
+                    if (isDesktop()) {
+                        // Desktop: inline input
+                        $('#chatSearchInputDesktop').toggleClass('hidden').focus();
+                        $('#chatSearchCloseDesktop').toggleClass('hidden');
+                        $('#chatSearchResultsDesktop').addClass('hidden').empty();
+                    } else {
+                        // Mobile: full width bar under header
+                        $('#chatSearchBarMobile').toggleClass('hidden');
+                        if (!$('#chatSearchBarMobile').hasClass('hidden')) {
+                            $('#chatSearchInputMobile').val('').focus();
+                            $('#chatSearchResultsMobile').addClass('hidden').empty();
+                        }
+                        closeContactInfo();
+                    }
+
+                });
+
+                $(document).on('click', '#startmessage', function() {
+                    closeContactInfo();
+                })
+
                 // Close buttons
                 $(document).on('click', '#chatSearchCloseDesktop', function() {
                     $('#chatSearchInputDesktop').addClass('hidden').val('');
@@ -1292,19 +1524,53 @@
             let selectedMessageBubble = null;
 
             $(document).on('click', '.message-menu-btn', function(e) {
-                e.stopPropagation(); // prevent closing immediately
+                e.stopPropagation();
 
+                const menu = $('#messageActionMenu');
+                const isSameTarget = selectedMessageBubble && selectedMessageBubble.is($(this).closest(
+                    '.relative'));
+                const isVisible = !menu.hasClass('hidden');
+
+                // If clicking same chevron while menu is open → close it
+                if (isVisible && isSameTarget) {
+                    menu.addClass('hidden');
+                    return;
+                }
+
+                // Otherwise, proceed with opening logic
                 selectedMessageBubble = $(this).closest('.relative');
                 selectedMessageText = selectedMessageBubble.find('.wa-text-primary').text();
 
-                const offset = $(this).offset();
-                const menu = $('#messageActionMenu');
+                const btnOffset = $(this).offset();
+                const menuWidth = menu.outerWidth();
+                const menuHeight = menu.outerHeight();
+                const viewportWidth = $(window).width();
+                const viewportHeight = $(window).height();
 
-                menu.css({
-                    top: offset.top + 20 + 'px',
-                    left: offset.left - 150 + 'px'
-                }).removeClass('hidden');
+                if (viewportWidth < 768) {
+                    // 📱 Mobile - bottom centered
+                    menu.css({
+                        left: '50%',
+                        top: viewportHeight - menuHeight - 20 + 'px',
+                        transform: 'translateX(-50%)'
+                    }).removeClass('hidden');
+                } else {
+                    // 💻 Desktop - smart positioning
+                    let left = btnOffset.left + 20;
+                    let top = btnOffset.top + 20;
+
+                    if (left + menuWidth > viewportWidth) left = btnOffset.left - menuWidth - 10;
+                    if (top + menuHeight > viewportHeight) top = btnOffset.top - menuHeight - 10;
+
+                    menu.css({
+                        top: top + 'px',
+                        left: left + 'px',
+                        transform: 'none'
+                    }).removeClass('hidden');
+                }
             });
+
+
 
             $(document).on('click', '.menu-item', function() {
                 const action = $(this).data('action');
@@ -1316,11 +1582,25 @@
                 } else if (action === 'star') {
                     const messageId = selectedMessageBubble.find('.message-menu-btn').data('messageid');
                     $.ajax({
-                        url : "{{ url('message/star') }}/" + messageId,
-                        type : "GET",
-                        success:function(response){
-                            toastr.success("Message starred");
-                        },error:function(error){
+                        url: "{{ url('message/star') }}/" + messageId,
+                        type: "GET",
+                        success: function(response) {
+
+                            const timestampLine = selectedMessageBubble.find('p.text-xs');
+                            const existingStar = timestampLine.find('.fa-star');
+
+                            if (existingStar.length) {
+                                // Star exists → remove it
+                                existingStar.remove();
+                            } else {
+                                // Star doesn't exist → add it
+                                timestampLine.prepend(
+                                    '<i class="fa fa-star text-sm mr-1"></i> ');
+                            }
+
+                            refreshStarredCountFromDOM();
+                        },
+                        error: function(error) {
 
                         }
                     });
@@ -1332,10 +1612,246 @@
 
             $(document).on('click', function() {
                 $('#messageActionMenu').addClass('hidden');
+                $('.chat-menu-dropdown').hide();
             });
 
 
         });
+
+        // --- Helpers to open/close side drawers ---
+
+        function openStarred() {
+            $('#starredSidebar').removeClass('translate-x-full');
+            $('#chat-header, #messagesArea, #chat-composer, #chat-blocked-banner').addClass('md:w-2/3');
+        }
+
+        function closeStarred() {
+            $('#starredSidebar').addClass('translate-x-full');
+            $('#chat-header, #messagesArea, #chat-composer, #chat-blocked-banner').removeClass('md:w-2/3');
+        }
+
+        // Close starred on X
+        $(document).on('click', '#closeStarred', function() {
+            closeStarred();
+        });
+
+        // Back to Contact Info
+        $(document).on('click', '#backToInfo', function() {
+            closeStarred();
+            openContactInfo();
+        });
+
+        // Open starred from Contact Info (closes Contact Info first)
+        $(document).on('click', '#openStarredBtn', function() {
+            $('#messageActionMenu').addClass('hidden'); // ensure the bubble menu is closed
+            closeContactInfo();
+            loadStarredMessages().then(() => {
+                openStarred();
+            });
+        });
+
+        // --- Fetch & render starred messages ---
+        // Try backend first; if not available, fall back to DOM scan.
+        async function loadStarredMessages() {
+            const sid = $('#chat-sid').val();
+            const $list = $('#starredList');
+            $list.empty().append(loader());
+
+            try {
+                const data = await $.ajax({
+                    url: "{{ url('message/starred') }}/" + sid, // expects [{id, body, date_created, author}]
+                    method: "GET"
+                });
+
+                if (Array.isArray(data) && data.length) {
+                    renderStarred(data);
+                    $('#starredCount').text(data.length);
+                    return;
+                }
+                // fallback if empty array or unexpected
+                const local = collectStarredFromDOM();
+                renderStarred(local);
+                $('#starredCount').text(local.length);
+            } catch (e) {
+                // fallback to DOM if API not present
+                const local = collectStarredFromDOM();
+                renderStarred(local);
+                $('#starredCount').text(local.length);
+            }
+        }
+
+        function loader() {
+            return $('<div class="p-4 text-sm text-gray-500">Loading…</div>');
+        }
+
+        // Build list UI
+        function renderStarred(items) {
+            const $list = $('#starredList');
+            $list.empty();
+
+            if (!items.length) {
+                $list.append('<div class="p-6 text-gray-500 text-sm">No starred messages yet.</div>');
+                return;
+            }
+
+            const contactName = getCurrentContactName();
+            const chatTitle = contactName; // adjust if you show group titles elsewhere
+            const youAvatar = $('#user_profile').val() || $('#chatHeaderAvatar').attr('src') || '';
+            const contactAvatar = $('#chatHeaderAvatar').attr('src') || $('#user_profile').val() || '';
+
+            items.forEach(m => {
+                const safeBody = escapeHtml(m.body || '');
+                const ts = m.date_created || new Date().toISOString();
+
+                // Infer sender name (prefer server-provided)
+                const isIncoming = (m.author && String(m.author).toLowerCase() !== 'system'); // 'system' = you
+                const senderName = m.author_name || (isIncoming ? contactName : 'You');
+                const avatar = isIncoming ? contactAvatar : youAvatar;
+
+                // Use your existing bubble styles (colors + tails)
+                const bubbleBase =
+                    isIncoming ?
+                    'wa-bg-message-in message-tail-in' :
+                    'wa-bg-message-out message-tail-out';
+
+                const row = $(`
+                    <div class="px-3 py-4 border-b">
+                        <!-- Header: avatar + sender ▸ chat + date/time (top-right) -->
+                        <div class="flex items-center justify-between text-xs text-gray-600 mb-2">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <img src="${avatar}" class="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                            <div class="truncate">
+                                <span class="font-medium text-gray-800">${escapeHtml(senderName)}</span>
+                                <span class="mx-1 text-gray-400">▸</span>
+                                <span class="text-gray-600 truncate">${escapeHtml(chatTitle)}</span>
+                            </div>
+                        </div>
+                        <span class="whitespace-nowrap text-gray-500">${formatDateHeader(ts)}</span>
+                        </div>
+
+                        <!-- Bubble -->
+                        <div class="relative ${bubbleBase} rounded-lg px-3 py-4 max-w-[85%] shadow-sm" style="max-width:85%;">
+                           <div class="wa-text-primary text-sm whitespace-pre-line">${safeBody}</div>
+
+                            <!-- Bottom-right star + time -->
+                            <div class="absolute -mb-1 -mr-1 right-2 bottom-1 flex items-center gap-1 text-xs wa-text-secondary bg-transparent">
+                                <i class="fa fa-star text-xs"></i>
+                                <span>${formatTimeOnly(ts)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    `);
+
+                // Click → jump to message
+                row.on('click', function() {
+                    closeStarred();
+                    jumpToMessageInChat(m.id);
+                });
+
+                $list.append(row);
+            });
+        }
+
+
+
+        // Fallback: scan current chat DOM for starred messages
+        function collectStarredFromDOM() {
+            const items = [];
+            $('#messagesArea .fa-star').each(function() {
+                const bubble = $(this).closest('.relative');
+                const body = bubble.find('.wa-text-primary').text();
+                const timeNode = bubble.find('p.text-xs').clone();
+                timeNode.find('.fa-star').remove();
+                const msgId = bubble.find('.message-menu-btn').data('messageid');
+
+                // Infer author from alignment: outgoing bubbles are in a "justify-end" wrapper
+                const wrapper = bubble.closest('.flex');
+                const isOutgoing = wrapper.hasClass('justify-end');
+
+                items.push({
+                    id: msgId || null,
+                    body: body,
+                    date_created: new Date().toISOString(), // or parse if you store timestamp text
+                    author: isOutgoing ? 'system' : 'user' // 'system' = you; 'user' = contact
+                    // author_name (optional) can be added here if you have it
+                });
+            });
+            return items;
+        }
+
+
+        // Try to parse "5:37 PM" into an ISO-ish string; fallback to now
+        function parseTimeFromText(t) {
+            return new Date().toISOString();
+        }
+
+        // Escape helpers
+        function escapeHtml(s) {
+            return s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // Reuse your existing formatDate(dateStr)
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            let hours = date.getHours();
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            return `${hours}:${minutes} ${ampm}`;
+        }
+
+        // Scroll to a starred message in the chat and highlight it
+        function jumpToMessageInChat(messageId) {
+            if (!messageId) return;
+            const targetBtn = $(`.message-menu-btn[data-messageid="${messageId}"]`);
+            if (!targetBtn.length) return;
+
+            const bubble = targetBtn.closest('.relative');
+            const $container = $('#messagesArea');
+
+            $container.animate({
+                scrollTop: bubble.offset().top - $container.offset().top + $container.scrollTop() - 100
+            }, 300);
+
+            // Temporary highlight
+            const overlay = $(
+                '<span class="absolute inset-0 rounded-lg bg-gray-300 bg-opacity-40 pointer-events-none"></span>');
+            bubble.addClass('overflow-hidden').append(overlay);
+            setTimeout(() => overlay.fadeOut(150, () => overlay.remove()), 800);
+        }
+
+        // Keep the count in sync when user toggles star from the message menu
+        function updateStarCountDelta(delta) {
+            const $count = $('#starredCount');
+            const current = parseInt($count.text() || '0', 10) || 0;
+            $count.text(Math.max(0, current + delta));
+        }
+
+        function getCurrentContactName() {
+            // try chat header first, then the contact sidebar
+            return ($('#chatHeaderName').text() || $('#sidebarName').text() || 'Contact').trim();
+        }
+
+        function formatDateHeader(dateStr) {
+            const d = new Date(dateStr);
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const yyyy = d.getFullYear();
+            const time = formatTimeOnly(dateStr);
+            return `${dd}/${mm}/${yyyy}`;
+        }
+
+        function formatTimeOnly(dateStr) {
+            const d = new Date(dateStr);
+            let h = d.getHours();
+            const m = String(d.getMinutes()).padStart(2, '0');
+            const a = h >= 12 ? 'PM' : 'AM';
+            h = h % 12 || 12;
+            return `${h}:${m} ${a}`;
+        }
     </script>
 </body>
 

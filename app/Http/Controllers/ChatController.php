@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Events\MessageSent;
 use App\Models\ChatControll;
 use App\Models\ChatHistory;
+use App\Services\FormatResponseService;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
 
@@ -20,7 +21,6 @@ class ChatController extends Controller
         return view('chats.index', $data);
     }
 
-
     // ** first message to customer ** //
     public function sendTemplateMessage(Request $request)
     {
@@ -35,7 +35,8 @@ class ChatController extends Controller
         $watsAppService = new WhatsappService();
         $messages = $watsAppService->getMessages($conversationSid);
         $auto_reply = (int) ChatControll::where('sid', $conversationSid)->value('auto_reply') ?? 0;
-        return response()->json(['messages' => $messages, 'auto_reply' => $auto_reply]);
+        $blocked = (int) ChatControll::where('sid', $conversationSid)->value('is_blocked') ?? 0;
+        return response()->json(['messages' => $messages, 'auto_reply' => $auto_reply, 'blocked'=> $blocked]);
     }
 
     public function syncChats()
@@ -54,7 +55,6 @@ class ChatController extends Controller
 
     public function sendAutoReply(Request $request)
     {
-
         $watsAppService = new WhatsappService();
         $response = $watsAppService->handleIncoming($request);
         return response()->noContent();
@@ -64,7 +64,7 @@ class ChatController extends Controller
     {
         try {
             $chat = ChatControll::where('sid', $sid)->first();
-            if($chat){
+            if ($chat) {
                 $chat->update([
                     'auto_reply' => false,
                 ]);
@@ -72,7 +72,7 @@ class ChatController extends Controller
                     'success' => true,
                     'message' => 'Chat auto replies are paused successfully',
                 ]);
-            }else{
+            } else {
                 return response()->json([
                     'success' => false,
                     'message' => 'Chat not found',
@@ -105,24 +105,52 @@ class ChatController extends Controller
         }
     }
 
-    public function deleteConversation($id){
+    public function deleteConversation($id)
+    {
         $watsAppService = new WhatsappService();
         return $watsAppService->deleteConversation($id);
     }
 
-    public function getContactDetails($sid){
+    public function getContactDetails($sid)
+    {
         $contact = ChatControll::where('sid', $sid)->first();
         return response()->json($contact);
     }
 
-    public function star($id){
+    public function star($id)
+    {
         $chathistory = ChatHistory::find($id);
-        $chathistory->update([
-            'is_starred' => true,
-        ]);
+        if ($chathistory->is_starred) {
+            $chathistory->update([
+                'is_starred' => false,
+            ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Message removed from starred'
+            ]);
+        } else {
+            $chathistory->update([
+                'is_starred' => true,
+            ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Message starred'
+            ]);
+        }
+    }
+
+    public function block($id)
+    {
+        $chat = ChatControll::where('sid', $id)->first();
+        if (!$chat) {
+            return response()->json(['success' => false, 'message' => 'Chat not found']);
+        }
+        $newStatus = !$chat->is_blocked;
+        $chat->update(['is_blocked' => $newStatus]);
         return response()->json([
             'success' => true,
-            'message' => 'Message starred id :' . $id,
+            'blocked' => $newStatus,
+            'message' => $newStatus ? 'Contact blocked successfully' : 'Contact unblocked',
         ]);
     }
 }

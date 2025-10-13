@@ -6,6 +6,8 @@ use App\Events\MessageSent;
 use App\Mail\AssistantFailureMail;
 use App\Models\ChatControll;
 use App\Models\ChatHistory;
+use App\Models\Credential;
+use App\Models\MessageTemplate;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -16,48 +18,35 @@ use Twilio\Rest\Client;
 
 class WhatsappService
 {
-    /**
-     * @var Client
-     */
     protected $twilio;
-
-    /**
-     * @var string
-     */
     protected $whatsappFrom;
-
-    /**
-     * @var string
-     */
     protected $openAiKey;
-
-    /**
-     * Your Assistant ID (Flettons Customer Services)
-     * as configured in OpenAI.
-     */
-    protected string $assistantId = 'asst_9PwjdWdvkrEfmbm8s8BFzBot';
+    protected string $assistantId;
 
     public function __construct()
     {
-        // load Twilio creds from config/services.php → .env
+        $credentials = Credential::first();
+        $this->assistantId = $credentials->assistant_id;
         $this->twilio = new Client(
-            config('services.twilio.sid'),
-            config('services.twilio.token')
+            $credentials->twilio_sid,
+            $credentials->twilio_token
         );
 
-        $this->whatsappFrom = config('services.twilio.whatsapp_from');
+        $this->whatsappFrom = $credentials->twilio_whats_app;
 
         // load OpenAI key from config/services.php → .env
-        $this->openAiKey = config('services.openai.key');
+        $this->openAiKey = $credentials->open_ai_key;
     }
 
     // send first template message
     public function sendWhatsAppMessage($request)
     {
+        $template = MessageTemplate::where('used_for', 'old_user')->first();
         $recipientNumber = 'whatsapp:' . $request->phone;
         $friendlyName = $request->phone;
         $message = 'Hello from fletton surveys';
-        $contentSid = 'HX8febaed305fb3d6f705269f53975e86c';
+        // $contentSid = 'HX8febaed305fb3d6f705269f53975e86c';
+        $contentSid = $template->template_id;
 
         $twilio = $this->twilio;  // \Twilio\Rest\Client
         $proxyAddress = $this->whatsappFrom;  // e.g. 'whatsapp:+14155238886'
@@ -139,7 +128,6 @@ class WhatsappService
                     'address' => $request->address,
                     'postal_code' => $request->postal_code,
                     'unread' => true,
-                    'unread_count' => 1,
                     'unread_message' => $msg->body,
                 ]
             );
@@ -191,7 +179,7 @@ class WhatsappService
                     'body' => $message,
                 ]);
 
-             ChatHistory::create([
+            ChatHistory::create([
                 'conversation_sid' => $conversationSid,
                 'message_sid' => $msg->sid,
                 'body' => $message,
@@ -233,46 +221,6 @@ class WhatsappService
         }
     }
 
-    //  public function getConversations(): array
-    // {
-    //     try {
-    //         $convs = $this->twilio
-    //             ->conversations
-    //             ->v1
-    //             ->conversations
-    //             ->stream(); // all conversations
-
-    //         $result = [];
-
-    //         foreach ($convs as $c) {
-    //             // fetch last message for this conversation
-    //             $messages = $this->twilio
-    //                 ->conversations
-    //                 ->v1
-    //                 ->conversations($c->sid)
-    //                 ->messages
-    //                 ->read([], 1); // only the latest one
-
-    //             $lastMessageDate = null;
-    //             if (!empty($messages)) {
-    //                 $lastMessageDate = $messages[0]->dateCreated->format('Y-m-d H:i:s');
-    //             }
-
-    //             $result[] = [
-    //                 'sid'            => $c->sid,
-    //                 'friendly_name'  => $c->friendlyName,
-    //                 'state'          => $c->state,
-    //                 'date_created'   => $c->dateCreated->format('Y-m-d H:i:s'),
-    //                 'last_message_at' => $lastMessageDate,
-    //             ];
-    //         }
-
-    //         return $result;
-    //     } catch (\Exception $e) {
-    //         return ['error' => $e->getMessage()];
-    //     }
-    // }
-
     /**
      * Get messages for one conversation
      */
@@ -301,7 +249,7 @@ class WhatsappService
 
             $msgs = ChatHistory::where('conversation_sid', $conversationSid)
                 ->orderBy('date_created', 'asc')
-                ->get(['id','message_sid', 'author', 'body', 'date_created', 'is_starred']);
+                ->get(['id', 'message_sid', 'author', 'body', 'date_created', 'is_starred']);
 
             return $msgs->map(function ($m) {
                 return [
@@ -317,45 +265,6 @@ class WhatsappService
             })->toArray();
         } catch (\Exception $e) {
             return ['error' => $e->getMessage()];
-        }
-    }
-
-    public function syncChats()
-    {
-        dd('syncChats');
-        try {
-            $conversations = $this->getConversations();
-
-            if (isset($conversations['error'])) {
-                return response()->json(['error' => $conversations['error']], 500);
-            }
-
-            foreach ($conversations as $conv) {
-                $msgs = $this
-                    ->twilio
-                    ->conversations
-                    ->v1
-                    ->conversations($conv['sid'])
-                    ->messages
-                    ->read();
-
-                foreach ($msgs as $msg) {
-                    ChatHistory::create([
-                        'conversation_sid' => $conv['sid'],
-                        'message_sid' => $msg->sid ?? null,
-                        'body' => $msg->body ?? '',
-                        'author' => $msg->author,
-                        'date_created' => Carbon::parse($msg->dateCreated)->format('Y-m-d H:i:s'),
-                    ]);
-                }
-            }
-
-            return response()->json([
-                'message' => 'Chats synchronized successfully',
-                'count' => count($conversations),
-            ]);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
@@ -403,6 +312,9 @@ class WhatsappService
         $userNumber = str_replace('whatsapp:', '', (string) $request->input('From', ''));
 
         $conversation = ChatControll::where('contact', $userNumber)->first();
+        if($conversation->is_blocked){
+            return response()->json(['message'=> 'contact is blocked']);
+        }
         $conversationSid = $conversation->sid;
         $conversation->update([
             'last_message' => Carbon::now(),
@@ -431,24 +343,17 @@ class WhatsappService
 
         // Run the assistant and fetch an HTML reply
         try {
-            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText);
+            $format_data_service = new FormatResponseService();
+
+            $formated_crm_data = $format_data_service->formatResponse($conversation->email);
+            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data);
             $replyText = $this->htmlToWhatsappText($replyHtml);
             // $replyText = $replyHtml;
             // Send reply into your chat & WhatsApp
             $this->sendCustomMessage($conversationSid, $replyText);
             event(new MessageSent($replyText, $conversationSid, 'admin'));
 
-            // save admin message to chat history
-            // ChatHistory::create([
-            //     'conversation_sid' => $conversationSid,
-            //     'body' => $replyText,
-            //     'author' => 'system',
-            //     'date_created' => Carbon::now()->toDateTimeString(),
-            // ]);
-
             $chatControll->update([
-                'unread' => true,
-                'unread_count' => $chatControll->unread_count + 1,
                 'unread_message' => $replyText,
             ]);
         } catch (\Throwable $e) {
@@ -542,27 +447,24 @@ class WhatsappService
     /**
      * Run the Assistant on the user’s thread and return the latest assistant HTML.
      */
-    protected function runAssistantAndGetReply(string $userNumber, string $userText): string
+    protected function runAssistantAndGetReply(string $userNumber, string $userText, array $crmData): string
     {
         // Get (or create) the OpenAI thread id using ONLY getOrCreateThreadId
         $threadId = $this->getOrCreateThreadId($userNumber);
 
-        // Helper to add a message to a thread
-        $addMessageToThread = function (string $threadId) use ($userText) {
+        // ✅ Send combined context + user message
+        $addMessageToThread = function (string $threadId) use ($userText, $crmData) {
+            $contextText = "```json\n" . json_encode($crmData, JSON_PRETTY_PRINT) . "\n```";
+
+            $content = "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n{$userText}";
+
             $resp = Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
                 'Content-Type' => 'application/json',
                 'OpenAI-Beta' => 'assistants=v2',
             ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
                 'role' => 'user',
-                'content' => $userText,
-            ]);
-
-            Log::debug('Assistants: add message response', [
-                'thread_id' => $threadId,
-                'status' => $resp->status(),
-                'ok' => $resp->ok(),
-                'body' => $resp->json(),
+                'content' => $content,
             ]);
 
             return $resp;
@@ -721,38 +623,106 @@ class WhatsappService
         return 'Thanks for your message — how can I help further?';
     }
 
-    // In WhatsappService
-
+    // format the message
     protected function htmlToWhatsappText(string $html): string
     {
-        // 1) Normalise <br> and paragraph breaks to newlines
         $normalized = preg_replace('/<\s*br\s*\/?>/i', "\n", $html);
         $normalized = preg_replace('/<\/\s*p\s*>/i', "\n\n", $normalized);
 
-        // 2) Replace anchors with just their href (remove anchor text)
-        //    e.g. <a href="https://x.com">Click here</a> => https://x.com
         $normalized = preg_replace_callback('~<a\b[^>]*>(.*?)</a>~is', function ($m) {
             $tag = $m[0];
             if (preg_match('~href\s*=\s*([\'"])(.*?)\1~i', $tag, $hrefMatch)) {
                 return $hrefMatch[2];  // keep only the URL
             }
-            // No href found: drop the tag but keep inner text as last resort
             return isset($m[1]) ? strip_tags($m[1]) : '';
         }, $normalized);
 
-        // 3) Remove all remaining tags
         $text = strip_tags($normalized);
-
-        // 4) Decode entities (&nbsp; → space, etc.)
         $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
-        // 5) Trim & tidy whitespace/newlines
-        //    - Collapse 3+ newlines to 2
-        //    - Convert Windows/Mac line endings if any slipped through
         $text = preg_replace("/\r\n?/", "\n", $text);
         $text = preg_replace("/\n{3,}/", "\n\n", $text);
         $text = preg_replace('/[ \t]{2,}/', ' ', $text);
 
         return trim($text);
     }
+
+    // sync chats between twilio and database
+    public function syncChats()
+    {
+        dd('syncChats');
+        try {
+            $conversations = $this->getConversations();
+
+            if (isset($conversations['error'])) {
+                return response()->json(['error' => $conversations['error']], 500);
+            }
+
+            foreach ($conversations as $conv) {
+                $msgs = $this
+                    ->twilio
+                    ->conversations
+                    ->v1
+                    ->conversations($conv['sid'])
+                    ->messages
+                    ->read();
+
+                foreach ($msgs as $msg) {
+                    ChatHistory::create([
+                        'conversation_sid' => $conv['sid'],
+                        'message_sid' => $msg->sid ?? null,
+                        'body' => $msg->body ?? '',
+                        'author' => $msg->author,
+                        'date_created' => Carbon::parse($msg->dateCreated)->format('Y-m-d H:i:s'),
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'message' => 'Chats synchronized successfully',
+                'count' => count($conversations),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    //  public function getConversations(): array
+    // {
+    //     try {
+    //         $convs = $this->twilio
+    //             ->conversations
+    //             ->v1
+    //             ->conversations
+    //             ->stream(); // all conversations
+
+    //         $result = [];
+
+    //         foreach ($convs as $c) {
+    //             // fetch last message for this conversation
+    //             $messages = $this->twilio
+    //                 ->conversations
+    //                 ->v1
+    //                 ->conversations($c->sid)
+    //                 ->messages
+    //                 ->read([], 1); // only the latest one
+
+    //             $lastMessageDate = null;
+    //             if (!empty($messages)) {
+    //                 $lastMessageDate = $messages[0]->dateCreated->format('Y-m-d H:i:s');
+    //             }
+
+    //             $result[] = [
+    //                 'sid'            => $c->sid,
+    //                 'friendly_name'  => $c->friendlyName,
+    //                 'state'          => $c->state,
+    //                 'date_created'   => $c->dateCreated->format('Y-m-d H:i:s'),
+    //                 'last_message_at' => $lastMessageDate,
+    //             ];
+    //         }
+
+    //         return $result;
+    //     } catch (\Exception $e) {
+    //         return ['error' => $e->getMessage()];
+    //     }
+    // }
 }
