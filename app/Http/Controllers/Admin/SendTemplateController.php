@@ -53,7 +53,7 @@ class SendTemplateController extends Controller
         $cleanPhone = preg_replace('/[^0-9+]/', '', $request->phone);
         $recipientNumber = 'whatsapp:' . $cleanPhone;
 
-        $friendlyName = $request->phone;
+        $friendlyName = $cleanPhone;
         $message = 'Hello from fletton surveys';
         // $contentSid = 'HX8febaed305fb3d6f705269f53975e86c';
         $contentSid = $request->template_id;
