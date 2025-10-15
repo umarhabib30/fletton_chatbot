@@ -485,7 +485,7 @@
         <input type="hidden" id="user_profile" value="{{ asset('assets/images/profile.png') }}" />
 
         <!-- Chat Pane -->
-        <main id="chatPane" class="flex-1 flex flex-col md:flex w-full">
+        <main id="chatPane" class="flex-1 flex flex-col md:flex w-full h-full">
             <!-- Chat Header -->
             <!-- Chat Header -->
             <div id="chat-header" class="chat-header hidden py-4 shadow-lg">
