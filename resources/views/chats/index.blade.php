@@ -180,6 +180,21 @@
             .custom-scrollbar::-webkit-scrollbar-thumb:hover {
                 background: #b9c1c7;
             }
+
+            #chat-composer {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                z-index: 50;
+                background: #F5F1EB;
+                border-top: 1px solid #ddd;
+            }
+
+            /* Add bottom padding to chat area so messages aren’t hidden behind the composer */
+            #messagesArea {
+                padding-bottom: 100px !important;
+            }
         }
 
         /* Message input focus */
