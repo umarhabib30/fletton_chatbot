@@ -183,11 +183,19 @@
 
             #messagesArea {
                 padding-bottom: 100px !important;
+                padding-top: 100px !important;
             }
 
             #chat-composer {
                 position: fixed;
                 bottom: 0px;
+                width: 100%;
+            }
+
+            #chat-header {
+                position: fixed;
+                top: 0px;
+                z-index: 55;
                 width: 100%;
             }
         }
