@@ -133,6 +133,40 @@
             justify-content: center;
         }
 
+
+        /* Fix chat composer disappearing in Chrome */
+#chatPane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Scrollable message area with bottom padding */
+#messagesArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1rem 100px; /* add bottom padding for the composer space */
+  scroll-behavior: smooth;
+}
+
+/* Fix composer position at bottom */
+#chat-composer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #F5F1EB;
+  z-index: 50;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* Ensure the overlay banners stack correctly */
+#chat-blocked-banner {
+  z-index: 49;
+}
+
+
         /* Mobile view state */
         @media (max-width: 767px) {
             #contactsPane {
