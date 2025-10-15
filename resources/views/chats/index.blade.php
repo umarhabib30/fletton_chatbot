@@ -181,7 +181,7 @@
                 background: #b9c1c7;
             }
 
-            #messagesArea {
+            /* #messagesArea {
                 padding-bottom: 100px !important;
                 padding-top: 100px !important;
             }
@@ -197,7 +197,7 @@
                 top: 0px;
                 z-index: 55;
                 width: 100%;
-            }
+            } */
         }
 
         /* Message input focus */
