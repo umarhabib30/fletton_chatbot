@@ -22,6 +22,8 @@ class WhatsappService
     protected $whatsappFrom;
     protected $openAiKey;
     protected string $assistantId;
+    protected $TWILIO_ACCOUNT_SID;
+    protected $TWILIO_AUTH_TOKEN;
 
     public function __construct()
     {
@@ -33,7 +35,8 @@ class WhatsappService
         );
 
         $this->whatsappFrom = $credentials->twilio_whats_app;
-
+        $this->TWILIO_ACCOUNT_SID = $credentials->twilio_sid;
+        $this->TWILIO_AUTH_TOKEN = $credentials->twilio_token;
         // load OpenAI key from config/services.php → .env
         $this->openAiKey = $credentials->open_ai_key;
     }
@@ -249,7 +252,7 @@ class WhatsappService
 
             $msgs = ChatHistory::where('conversation_sid', $conversationSid)
                 ->orderBy('date_created', 'asc')
-                ->get(['id', 'message_sid', 'author', 'body', 'date_created', 'is_starred']);
+                ->get(['id', 'message_sid', 'author', 'body', 'date_created', 'is_starred', 'attachments', 'has_images']);
 
             return $msgs->map(function ($m) {
                 return [
@@ -258,6 +261,8 @@ class WhatsappService
                     'sid' => $m->message_sid,  // matches Twilio 'sid'
                     'author' => $m->author,
                     'body' => $m->body,
+                    'attachments' => $m->attachments,
+                    'has_images' => $m->has_images,
                     'date_created' => $m->date_created
                         ? Carbon::parse($m->date_created)->format('Y-m-d H:i:s')
                         : null,
@@ -302,33 +307,75 @@ class WhatsappService
     public function handleIncoming(Request $request)
     {
         // Log::info('WhatsApp webhook payload:', $request->all());
-
-        $userText = trim((string) $request->input('Body', ''));
-        if ($userText === '') {
-            return response()->noContent();
-        }
-
+        $mediaPaths = [];
+        $numMedia = (int) $request->input('NumMedia', 0);
         // Normalise WhatsApp number and find Twilio Conversation SID
         $userNumber = str_replace('whatsapp:', '', (string) $request->input('From', ''));
 
         $conversation = ChatControll::where('contact', $userNumber)->first();
-        if($conversation->is_blocked){
-            return response()->json(['message'=> 'contact is blocked']);
+        if ($conversation->is_blocked) {
+            return response()->json(['message' => 'contact is blocked']);
         }
         $conversationSid = $conversation->sid;
         $conversation->update([
             'last_message' => Carbon::now(),
         ]);
+
+        if ($numMedia > 0) {
+            for ($i = 0; $i < $numMedia; $i++) {
+                $mediaUrl = $request->input("MediaUrl{$i}");
+                $mediaType = $request->input("MediaContentType{$i}");
+
+                // download file from Twilio
+                $response = Http::withBasicAuth(
+                    $this->TWILIO_ACCOUNT_SID,
+                    $this->TWILIO_AUTH_TOKEN
+                )->get($mediaUrl);
+
+                $extension = match ($mediaType) {
+                    'image/png' => 'png',
+                    'image/jpeg' => 'jpg',
+                    default => 'bin',
+                };
+
+                $filename = 'whatsapp_' . now()->timestamp . "_{$i}." . $extension;
+                $storagePath = storage_path("app/public/uploads/{$filename}");
+                file_put_contents($storagePath, $response->body());
+
+                $publicUrl = asset("storage/uploads/{$filename}");
+
+                $mediaPaths[] = [
+                    'image' => $publicUrl,
+                    'mime_type' => $mediaType,
+                ];
+            }
+
+            $history = ChatHistory::create([
+                'conversation_sid' => $conversationSid ?? null,
+                'body' => '[Image Received]',
+                'author' => 'user',
+                'attachments' => json_encode($mediaPaths),
+                'has_images' => true,
+                'date_created' => now(),
+            ]);
+            $userImageUrls = array_column($mediaPaths, 'image');
+            $userText = trim((string) $request->input('Body', ''));
+        } else {
+            $userImageUrls = null;
+            $userText = trim((string) $request->input('Body', ''));
+            if ($userText === '') {
+                return response()->noContent();
+            }
+            ChatHistory::create([
+                'conversation_sid' => $conversationSid,
+                'body' => $userText,
+                'author' => 'user',
+                'date_created' => Carbon::now()->toDateTimeString(),
+            ]);
+        }
+        $userText = trim((string) $request->input('Body', ''));
         // Emit user message to your UI
         event(new MessageSent($userText, $conversationSid, 'user'));
-
-        // save user message to chat history
-        ChatHistory::create([
-            'conversation_sid' => $conversationSid,
-            'body' => $userText,
-            'author' => 'user',
-            'date_created' => Carbon::now()->toDateTimeString(),
-        ]);
 
         $chatControll = ChatControll::where('sid', $conversationSid)->first();
         $chatControll->update([
@@ -346,7 +393,8 @@ class WhatsappService
             $format_data_service = new FormatResponseService();
 
             $formated_crm_data = $format_data_service->formatResponse($conversation->email);
-            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data);
+            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data, $userImageUrls);
+            // dd($replyHtml);
             $replyText = $this->htmlToWhatsappText($replyHtml);
             // $replyText = $replyHtml;
             // Send reply into your chat & WhatsApp
@@ -447,16 +495,37 @@ class WhatsappService
     /**
      * Run the Assistant on the user’s thread and return the latest assistant HTML.
      */
-    protected function runAssistantAndGetReply(string $userNumber, string $userText, array $crmData): string
+    protected function runAssistantAndGetReply(string $userNumber, ?string $userText, array $crmData, ?array $imageUrls = null): string
     {
         // Get (or create) the OpenAI thread id using ONLY getOrCreateThreadId
         $threadId = $this->getOrCreateThreadId($userNumber);
 
         // ✅ Send combined context + user message
-        $addMessageToThread = function (string $threadId) use ($userText, $crmData) {
+        $addMessageToThread = function (string $threadId) use ($userText, $crmData, $imageUrls) {
             $contextText = "```json\n" . json_encode($crmData, JSON_PRETTY_PRINT) . "\n```";
 
-            $content = "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n{$userText}";
+            $messageContent = [];
+
+            if ($imageUrls) {
+                foreach ($imageUrls as $url) {
+                    $messageContent[] = [
+                        'type' => 'image_url',
+                        'image_url' => ['url' => $url]
+                    ];
+                }
+            }
+
+            if (!empty($userText)) {
+                $messageContent[] = [
+                    'type' => 'text',
+                    'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n{$userText}"
+                ];
+            } else {
+                $messageContent[] = [
+                    'type' => 'text',
+                    'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_SENT_ONLY_IMAGE"
+                ];
+            }
 
             $resp = Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
@@ -464,7 +533,7 @@ class WhatsappService
                 'OpenAI-Beta' => 'assistants=v2',
             ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
                 'role' => 'user',
-                'content' => $content,
+                'content' => $messageContent,  // ✅ FIXED: Use $messageContent, not $content
             ]);
 
             return $resp;

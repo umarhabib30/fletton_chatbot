@@ -3,8 +3,13 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <link rel="icon" type="image/x-icon" href="{{ asset('assets/logo/logo.png') }}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+
     <title>Flettons Chatbot</title>
 
     <!-- TailwindCSS v2 CDN -->
@@ -21,11 +26,193 @@
     <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 
     <style>
+        #contactsList {
+            -webkit-overflow-scrolling: touch;
+            /* smooth scroll for iOS */
+            overflow-y: auto !important;
+            /* vertical scroll always active */
+            max-height: 100vh;
+            /* prevent overflow freeze */
+            touch-action: pan-y;
+            /* allow vertical touch scroll */
+        }
+
+        @media (max-width: 768px) {
+            #contactsList {
+                height: calc(100vh - 120px);
+                /* adjust depending on header/footer height */
+            }
+        }
+
+        /*
+        ========================================
+        WhatsApp Clone - Professional Layout
+        ========================================
+
+        Architecture:
+        - Fixed header and composer (position: fixed)
+        - Scrollable messages area in between
+        - No browser UI animation interference
+        - Consistent across iPhone Safari, Android Chrome
+        - Keyboard-aware with Visual Viewport API
+        - Safe area support for notched devices
+
+        Key Features:
+        ✓ Fixed layout prevents browser bar animations
+        ✓ Overscroll prevention (no bounce/pull-to-refresh)
+        ✓ Keyboard detection with proper spacing
+        ✓ Touch optimizations for native feel
+        ✓ Desktop responsive with sidebar support
+        */
+
+        /* CSS Variables for Safe Areas & Keyboard */
+        :root {
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --kb: 0px;
+            --header-height: 72px;
+            --composer-height: 64px;
+        }
+
+
+
+        /* Prevent overscroll bounce on iOS */
+        html,
+        body {
+            position: fixed;
+
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* App Container - Fixed Height */
+        #app {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+        }
+
+        /* Chat Pane - Full Height with Fixed Header/Footer */
+        #chatPane {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: #F5F1EB;
+        }
+
+        /* Fixed Header - Always on Top */
+        #chat-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: #fff;
+            padding: 1rem;
+            padding-top: calc(1rem + var(--safe-top));
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            min-height: var(--header-height);
+        }
+
+        /* Messages Area - Scrollable Middle Section */
+        #messagesArea {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            padding: 1rem;
+            padding-top: calc(var(--header-height) + 1rem);
+            padding-bottom: calc(var(--composer-height) + 1rem);
+            background: #F5F1EB;
+        }
+
+        /* Fixed Composer - Always at Bottom */
+        #chat-composer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: #F5F1EB;
+            padding: 0.75rem;
+            padding-bottom: calc(0.75rem + var(--safe-bottom));
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, .05);
+            min-height: var(--composer-height);
+        }
+
+        /* Keyboard Open State */
+        .kb-open #chat-composer {
+            bottom: 0;
+            padding-bottom: 0.75rem;
+        }
+
+        /* Banner Positioning */
+        #chat-blocked-banner {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 99;
+            padding-bottom: var(--safe-bottom);
+        }
+
+        /* Contacts Pane */
+        #contactsPane {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #contactsList {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+        }
+
+        /* Prevent pull-to-refresh and overscroll */
+        .scrollable-area {
+            overscroll-behavior-y: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Contact Info Sidebar */
+        #contactSidebar {
+            overscroll-behavior: contain;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Starred Sidebar */
+        #starredSidebar {
+            overscroll-behavior: contain;
+        }
+
+        #starredList {
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+        }
+
         /* === WhatsApp-like Light Theme === */
         body {
             background: #f5f7fb;
             color: #111b21;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .scrollbar-hide {
@@ -34,6 +221,48 @@
 
         .scrollbar-hide::-webkit-scrollbar {
             display: none;
+        }
+
+        /* Touch action optimization */
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+        }
+
+        input,
+        textarea,
+        button,
+        select,
+        a {
+            -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+            -webkit-touch-callout: default;
+        }
+
+        /* Smooth scrolling for all scrollable areas */
+        #messagesArea,
+        #contactsList,
+        #contactSidebar,
+        #starredList {
+            scroll-behavior: smooth;
+            overscroll-behavior: contain;
+        }
+
+        /* Prevent zoom on input focus (iOS) */
+        input[type="text"],
+        input[type="search"],
+        textarea {
+            font-size: 16px !important;
+        }
+
+        /* Standalone mode optimizations */
+        html.standalone-mode {
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        html.standalone-mode body {
+            padding-top: var(--safe-top);
+            padding-bottom: var(--safe-bottom);
         }
 
         /* Light palette */
@@ -85,7 +314,6 @@
             opacity: 1;
         }
 
-
         /* Message tails (match bubble colors) */
         .message-tail-in::before {
             content: '';
@@ -133,48 +361,59 @@
             justify-content: center;
         }
 
-
         /* Fix chat composer disappearing in Chrome */
-#chatPane {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-/* Scrollable message area with bottom padding */
-#messagesArea {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1rem 1rem 100px; /* add bottom padding for the composer space */
-  scroll-behavior: smooth;
-}
-
-/* Fix composer position at bottom */
-#chat-composer {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: #F5F1EB;
-  z-index: 50;
-  border-top: 1px solid #e5e7eb;
-}
-
-/* Ensure the overlay banners stack correctly */
-#chat-blocked-banner {
-  z-index: 49;
-}
-
+        /*#chatPane {*/
+        /* position: relative;*/
+        /* display: flex;*/
+        /* flex-direction: column;*/
+        /* height: 100%;*/
+        /*}*/
+        /* Scrollable message area with bottom padding */
+        /*#messagesArea {*/
+        /* flex: 1;*/
+        /* overflow-y: auto;*/
+        /* padding: 1rem 1rem 100px; */
+        /* scroll-behavior: smooth;*/
+        /*}*/
+        /* Fix composer position at bottom */
+        /*#chat-composer {*/
+        /* position: absolute;*/
+        /* bottom: 0;*/
+        /* left: 0;*/
+        /* right: 0;*/
+        /* background: #F5F1EB;*/
+        /* z-index: 50;*/
+        /* border-top: 1px solid #e5e7eb;*/
+        /*}*/
+        /* Ensure the overlay banners stack correctly */
+        #chat-blocked-banner {
+            z-index: 49;
+        }
 
         /* Mobile view state */
         @media (max-width: 767px) {
             #contactsPane {
                 display: block;
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                left: 0;
+                top: 0;
+                z-index: 1;
+            }
+
+            .submenu {
+                right: 10px;
             }
 
             #chatPane {
                 display: none;
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                left: 0;
+                top: 0;
+                z-index: 2;
             }
 
             #app.is-chat-open #contactsPane {
@@ -193,7 +432,18 @@
                 max-width: 80%;
             }
 
+            /* Mobile: Full width header and composer */
+            #chat-header {
+                left: 0;
+                right: 0;
+                width: 100%;
+            }
 
+            #chat-composer {
+                left: 0;
+                right: 0;
+                width: 100%;
+            }
         }
 
         /* Custom scrollbar for desktop */
@@ -215,23 +465,44 @@
                 background: #b9c1c7;
             }
 
-            /* #messagesArea {
-                padding-bottom: 100px !important;
-                padding-top: 100px !important;
-            }
-
-            #chat-composer {
-                position: fixed;
-                bottom: 0px;
-                width: 100%;
+            /* Desktop: Header and composer positioned relative to chatPane */
+            #chatPane {
+                flex: 1;
             }
 
             #chat-header {
-                position: fixed;
-                top: 0px;
-                z-index: 55;
-                width: 100%;
-            } */
+                left: 25%;
+                right: 0;
+            }
+
+            #chat-composer {
+                left: 25%;
+                right: 0;
+            }
+
+            #messagesArea {
+                padding-left: 1.5rem;
+                padding-right: 1.5rem;
+            }
+
+            /* When sidebar is open (2/3 width) */
+            .w-2\/3 #chat-header,
+            #chat-header.w-2\/3 {
+                left: 25%;
+                right: 25%;
+            }
+
+            .w-2\/3 #chat-composer,
+            #chat-composer.w-2\/3 {
+                left: 25%;
+                right: 25%;
+            }
+
+            .w-2\/3 #messagesArea,
+            #messagesArea.w-2\/3 {
+                padding-left: 1.5rem;
+                padding-right: 1.5rem;
+            }
         }
 
         /* Message input focus */
@@ -246,7 +517,6 @@
             border: none !important;
         }
 
-
         /* Submenu */
         .submenu {
             display: none;
@@ -254,11 +524,10 @@
             border-radius: 8px;
             position: absolute;
             top: 50px;
-            /* Adjust to position relative to the button */
-            left: 50;
+            left: 150px;
             background-color: #ffffff;
             box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
-            z-index: 999;
+            z-index: 9999999 !important;
         }
 
         .submenu ul {
@@ -281,7 +550,6 @@
             /* or adjust to match the chevron width */
         }
 
-
         .swal2-cancel-btn {
             background: transparent;
             color: #25d366;
@@ -297,7 +565,6 @@
 
         .swal2-cancel-btn:hover {
             background: #f0f0f0;
-
         }
 
         .swal2-delete-btn {
@@ -314,9 +581,7 @@
 
         .swal2-delete-btn:hover {
             background: #d30132;
-
         }
-
 
         /* Overlay Background for loading */
         .overlay {
@@ -616,7 +881,7 @@
 
             <!-- Messages -->
             <div id="messagesArea"
-                class="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 scrollbar-hide custom-scrollbar chat-bg-pattern">
+                class="flex-1  p-4 md:p-6 space-y-3 scrollbar-hide custom-scrollbar chat-bg-pattern">
             </div>
 
             <div id="chat-blocked-banner"
@@ -779,6 +1044,32 @@
         </ul>
     </div>
 
+    {{-- show image inside the chat model --}}
+    <div id="imagePreviewModal"
+        class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center hidden z-50 p-2">
+        <div class="relative bg-white rounded-lg shadow-lg max-w-[90vw] max-h-[90vh] flex flex-col">
+
+            <!-- Header Controls -->
+            <div class="absolute top-2 right-2 flex gap-3 text-gray-700">
+
+                <!-- Download Icon -->
+                <a id="downloadImageBtn" href="#" download class="text-gray-700 hover:text-blue-600 text-xl">
+                    <i class="fa fa-download"></i>
+                </a>
+
+                <!-- Close Icon -->
+                <button onclick="closeImagePreview()" class="text-gray-700 hover:text-red-600 text-xl">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Image Content -->
+            <img id="previewImage" src="" class="object-contain max-h-[85vh] max-w-full rounded-lg" />
+
+        </div>
+    </div>
+
+
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script>
@@ -821,7 +1112,11 @@
 
         function scrollToBottom() {
             var messagesArea = document.getElementById('messagesArea');
-            messagesArea.scrollTop = messagesArea.scrollHeight;
+            if (messagesArea) {
+                requestAnimationFrame(() => {
+                    messagesArea.scrollTop = messagesArea.scrollHeight;
+                });
+            }
         }
 
         // Pusher (dev logging)
@@ -1294,17 +1589,36 @@
                                             </div>
                                         </div>`;
                                 } else {
-                                    html = `
-                                        <div class="flex items-end space-x-2">
-                                            <img src="${contactImg}" alt="${contactName}" class="w-8 h-8 rounded-full flex-shrink-0" />
-                                            <div class="relative wa-bg-message-in rounded-lg px-3 py-2 max-w-md shadow-sm message-tail-in">
-                                                <p class="wa-text-primary text-sm break-words mr-3">${message.body}</p>
-                                                <p class="text-xs wa-text-secondary text-right mt-1"> ${message.is_starred ? '<i class="fa fa-star text-sm"></i>' : ''}   ${formatDate(message.date_created)}</p>
-                                                  <button data-messageid=${message.id} class="message-menu-btn absolute top-1 right-1 text-gray-500 opacity-0 hover:opacity-100">
-                                                    <i class="fa fa-chevron-down"></i>
-                                                  </button>
-                                            </div>
-                                        </div>`;
+                                    if (message.has_images == true) {
+                                        let images = JSON.parse(message.attachments || '[]');
+                                        let imgsHtml = images.map(img => `
+                                            <img src="${img.image}" class="max-w-[200px] rounded-lg mb-2 shadow-sm cursor-pointer" onclick="showImagePreview('${img.image}')" />
+                                        `).join('');
+
+                                        html = `
+                                            <div class="flex items-end space-x-2">
+                                                <img src="${contactImg}" alt="${contactName}" class="w-8 h-8 rounded-full flex-shrink-0" />
+                                                <div class="relative wa-bg-message-in rounded-lg px-3 py-2 max-w-md shadow-sm message-tail-in">
+                                                    ${imgsHtml}
+                                                    <p class="text-xs wa-text-secondary text-right mt-1">${formatDate(message.date_created)}</p>
+                                                </div>
+                                            </div>`;
+
+                                    } else {
+
+                                        html = `
+                                            <div class="flex items-end space-x-2">
+                                                <img src="${contactImg}" alt="${contactName}" class="w-8 h-8 rounded-full flex-shrink-0" />
+                                                <div class="relative wa-bg-message-in rounded-lg px-3 py-2 max-w-md shadow-sm message-tail-in">
+                                                    <p class="wa-text-primary text-sm break-words mr-3">${message.body}</p>
+                                                    <p class="text-xs wa-text-secondary text-right mt-1"> ${message.is_starred ? '<i class="fa fa-star text-sm"></i>' : ''}   ${formatDate(message.date_created)}</p>
+                                                      <button data-messageid=${message.id} class="message-menu-btn absolute top-1 right-1 text-gray-500 opacity-0 hover:opacity-100">
+                                                        <i class="fa fa-chevron-down"></i>
+                                                      </button>
+                                                </div>
+                                            </div>`;
+                                    }
+
                                 }
                                 $messages.append(html);
                             });
@@ -1368,11 +1682,35 @@
                 updateLastMessage($('#chat-sid').val(), message);
                 scrollToBottom();
                 $input.val('');
+
+
+
+                // Keep keyboard open (re-focus input after send)
+                requestAnimationFrame(() => {
+                    $input.focus({
+                        preventScroll: true
+                    });
+                    const el = $input[0];
+                    if (el && el.setSelectionRange) {
+                        try {
+                            el.setSelectionRange(el.value.length, el.value.length);
+                        } catch (e) {}
+                    }
+                });
+
             }
 
-            $('#messageInput').on('keypress', function(e) {
-                if (e.which === 13) sendCurrentMessage();
+            $('#messageInput').on('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault(); // form submit/blur stop
+                    sendCurrentMessage();
+                }
             });
+
+
+            // $('#messageInput').on('keypress', function(e) {
+            //     if (e.which === 13) sendCurrentMessage();
+            // });
             $('#sendBtn').on('click', sendCurrentMessage);
 
             function formatDate(dateStr) {
@@ -1404,40 +1742,40 @@
                 }
 
                 // Toggle search on button click
-                $(document).on('click', '#chatSearchBtn', function() {
-                    if (isDesktop()) {
-                        // Desktop: inline input
-                        $('#chatSearchInputDesktop').toggleClass('hidden').focus();
-                        $('#chatSearchCloseDesktop').toggleClass('hidden');
-                        $('#chatSearchResultsDesktop').addClass('hidden').empty();
-                    } else {
-                        // Mobile: full width bar under header
-                        $('#chatSearchBarMobile').toggleClass('hidden');
-                        if (!$('#chatSearchBarMobile').hasClass('hidden')) {
-                            $('#chatSearchInputMobile').val('').focus();
-                            $('#chatSearchResultsMobile').addClass('hidden').empty();
-                        }
-                    }
-                });
+                // $(document).on('click', '#chatSearchBtn', function() {
+                //     if (isDesktop()) {
+                //         // Desktop: inline input
+                //         $('#chatSearchInputDesktop').toggleClass('hidden').focus();
+                //         $('#chatSearchCloseDesktop').toggleClass('hidden');
+                //         $('#chatSearchResultsDesktop').addClass('hidden').empty();
+                //     } else {
+                //         // Mobile: full width bar under header
+                //         $('#chatSearchBarMobile').toggleClass('hidden');
+                //         if (!$('#chatSearchBarMobile').hasClass('hidden')) {
+                //             $('#chatSearchInputMobile').val('').focus();
+                //             $('#chatSearchResultsMobile').addClass('hidden').empty();
+                //         }
+                //     }
+                // });
 
                 // Toggle search on button click
-                $(document).on('click', '#chatSearchBtn2', function() {
-                    if (isDesktop()) {
-                        // Desktop: inline input
-                        $('#chatSearchInputDesktop').toggleClass('hidden').focus();
-                        $('#chatSearchCloseDesktop').toggleClass('hidden');
-                        $('#chatSearchResultsDesktop').addClass('hidden').empty();
-                    } else {
-                        // Mobile: full width bar under header
-                        $('#chatSearchBarMobile').toggleClass('hidden');
-                        if (!$('#chatSearchBarMobile').hasClass('hidden')) {
-                            $('#chatSearchInputMobile').val('').focus();
-                            $('#chatSearchResultsMobile').addClass('hidden').empty();
-                        }
-                        closeContactInfo();
-                    }
+                // $(document).on('click', '#chatSearchBtn2', function() {
+                //     if (isDesktop()) {
+                //         // Desktop: inline input
+                //         $('#chatSearchInputDesktop').toggleClass('hidden').focus();
+                //         $('#chatSearchCloseDesktop').toggleClass('hidden');
+                //         $('#chatSearchResultsDesktop').addClass('hidden').empty();
+                //     } else {
+                //         // Mobile: full width bar under header
+                //         $('#chatSearchBarMobile').toggleClass('hidden');
+                //         if (!$('#chatSearchBarMobile').hasClass('hidden')) {
+                //             $('#chatSearchInputMobile').val('').focus();
+                //             $('#chatSearchResultsMobile').addClass('hidden').empty();
+                //         }
+                //         closeContactInfo();
+                //     }
 
-                });
+                // });
 
                 $(document).on('click', '#startmessage', function() {
                     closeContactInfo();
@@ -1568,9 +1906,72 @@
                 });
 
                 // On resize, close UIs to avoid layout glitches
-                $(window).on('resize', closeAllSearchUIs);
+                // $(window).on('resize', closeAllSearchUIs);
+
+
+
+
+
+
             })();
 
+            (function() {
+                let lastVVH = (window.visualViewport && visualViewport.height) || window.innerHeight;
+                $(window).off('resize.searchui');
+
+                $(window).on('resize.searchui', function() {
+                    const ae = document.activeElement;
+                    const isSearchFocused = ae && (
+                        ae.id === 'chatSearchInputMobile' ||
+                        ae.id === 'chatSearchInputDesktop'
+                    );
+
+                    const vv = window.visualViewport;
+                    const cur = (vv && vv.height) || window.innerHeight;
+                    const delta = Math.abs(cur - lastVVH);
+                    const keyboardLikely = delta > 50;
+
+                    if (keyboardLikely && isSearchFocused) {
+                        lastVVH = cur;
+                        return;
+                    }
+
+                    if (typeof window.closeAllSearchUIs === 'function') {
+                        window.closeAllSearchUIs();
+                    }
+                    lastVVH = cur;
+                });
+            })();
+
+
+
+
+            (function() {
+                let lastVVH = (window.visualViewport && visualViewport.height) || window.innerHeight;
+
+                // remove old binding if kisi aur jaga laga ho
+                $(window).off('resize', closeAllSearchUIs);
+
+                $(window).on('resize', function() {
+                    const ae = document.activeElement;
+                    const isSearchFocused = ae && (ae.id === 'chatSearchInputMobile' || ae.id ===
+                        'chatSearchInputDesktop');
+
+                    const vv = window.visualViewport;
+                    const cur = (vv && vv.height) || window.innerHeight;
+                    const delta = Math.abs(cur - lastVVH);
+                    const keyboardLikely = delta > 50; // ~keyboard threshold
+
+                    // Agar keyboard ki wajah se resize hua & search input focused hai -> close mat karo
+                    if (keyboardLikely && isSearchFocused) {
+                        lastVVH = cur;
+                        return;
+                    }
+
+                    closeAllSearchUIs();
+                    lastVVH = cur;
+                });
+            })();
 
             let selectedMessageText = "";
             let selectedMessageBubble = null;
@@ -1905,6 +2306,376 @@
             return `${h}:${m} ${a}`;
         }
     </script>
+
+
+
+
+    <script>
+        (function() {
+            const root = document.documentElement;
+            const messagesArea = document.getElementById('messagesArea');
+            const composer = document.getElementById('chat-composer');
+            const chatHeader = document.getElementById('chat-header');
+            let resizeTimer;
+            let lastHeight = window.innerHeight;
+
+            function updateLayout() {
+                const vv = window.visualViewport;
+                if (!vv) {
+                    return;
+                }
+
+                // Calculate keyboard height
+                const kb = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+                root.style.setProperty('--kb', kb + 'px');
+
+                // Detect if keyboard is open (threshold for mobile browser UI changes)
+                const isKeyboardOpen = kb > 100;
+
+                if (isKeyboardOpen) {
+                    document.body.classList.add('kb-open');
+
+                    // Adjust messages area bottom padding to account for keyboard
+                    if (messagesArea) {
+                        const composerHeight = composer?.offsetHeight || 64;
+                        messagesArea.style.paddingBottom = `${composerHeight + kb}px`;
+                    }
+
+                    // Keep messages scrolled to bottom
+                    requestAnimationFrame(() => {
+                        if (messagesArea) {
+                            messagesArea.scrollTop = messagesArea.scrollHeight;
+                        }
+                    });
+                } else {
+                    document.body.classList.remove('kb-open');
+
+                    // Reset to default padding
+                    if (messagesArea) {
+                        const composerHeight = composer?.offsetHeight || 64;
+                        const headerHeight = chatHeader?.offsetHeight || 72;
+                        messagesArea.style.paddingBottom = `${composerHeight + 16}px`;
+                        messagesArea.style.paddingTop = `${headerHeight + 16}px`;
+                    }
+                }
+
+                lastHeight = window.innerHeight;
+            }
+
+            function debouncedUpdate() {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(updateLayout, 50);
+            }
+
+            // Initialize on load
+            window.addEventListener('load', () => {
+                setTimeout(updateLayout, 100);
+            });
+
+            // Handle orientation change
+            window.addEventListener('orientationchange', () => {
+                setTimeout(updateLayout, 300);
+            });
+
+            // Handle viewport resize (keyboard, browser UI)
+            window.addEventListener('resize', debouncedUpdate);
+
+            // Visual Viewport API for precise keyboard detection
+            if (window.visualViewport) {
+                visualViewport.addEventListener('resize', debouncedUpdate);
+                visualViewport.addEventListener('scroll', updateLayout);
+            }
+
+            // Input focus handlers
+            const messageInput = document.getElementById('messageInput');
+            if (messageInput) {
+                messageInput.addEventListener('focus', () => {
+                    setTimeout(() => {
+                        updateLayout();
+                        // Scroll input into view
+                        if (messagesArea) {
+                            messagesArea.scrollTop = messagesArea.scrollHeight;
+                        }
+                    }, 350);
+                });
+
+                messageInput.addEventListener('blur', () => {
+                    setTimeout(updateLayout, 150);
+                });
+            }
+
+            // Prevent elastic scrolling on iOS
+            //   document.addEventListener('touchmove', function(e) {
+            //     if (e.target === document.body || e.target === document.documentElement) {
+            //       e.preventDefault();
+            //     }
+            //   }, { passive: false });
+
+            // ✅ new: sirf non-scroll areas me prevent, inputs ko allow
+            document.addEventListener('touchmove', function(e) {
+                const tag = (e.target.tagName || '').toLowerCase();
+                if (tag === 'input' || tag === 'textarea') return;
+
+                const withinScrollable = e.target.closest(
+                    '#messagesArea, #contactsList, #contactSidebar, #starredList, #chatSearchBarMobile');
+                if (!withinScrollable) {
+                    e.preventDefault();
+                }
+            }, {
+                passive: false
+            });
+
+
+        })();
+    </script>
+
+    <script>
+        // Additional initialization and mobile optimizations
+        (function() {
+            'use strict';
+
+            // Prevent address bar from affecting layout
+            function lockViewport() {
+                const metaViewport = document.querySelector('meta[name="viewport"]');
+                if (metaViewport) {
+                    metaViewport.setAttribute('content',
+                        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, height=' +
+                        window.innerHeight
+                    );
+                }
+            }
+
+            // Force initial layout calculation
+            function initializeLayout() {
+                const messagesArea = document.getElementById('messagesArea');
+                const chatHeader = document.getElementById('chat-header');
+                const composer = document.getElementById('chat-composer');
+
+                if (messagesArea && chatHeader && composer) {
+                    const headerHeight = chatHeader.offsetHeight || 72;
+                    const composerHeight = composer.offsetHeight || 64;
+
+                    messagesArea.style.paddingTop = `${headerHeight + 16}px`;
+                    messagesArea.style.paddingBottom = `${composerHeight + 16}px`;
+                }
+            }
+
+            // Handle Android Chrome bottom bar
+            function handleAndroidChrome() {
+                if (/Android/i.test(navigator.userAgent)) {
+                    // Force layout recalculation on Android
+                    window.addEventListener('resize', function() {
+                        const vh = window.innerHeight * 0.01;
+                        document.documentElement.style.setProperty('--vh', `${vh}px`);
+                    });
+
+                    // Initial setting
+                    const vh = window.innerHeight * 0.01;
+                    document.documentElement.style.setProperty('--vh', `${vh}px`);
+                }
+            }
+
+            // Prevent pull-to-refresh
+            let touchStartY = 0;
+            document.addEventListener('touchstart', function(e) {
+                touchStartY = e.touches[0].clientY;
+            }, {
+                passive: true
+            });
+
+            document.addEventListener('touchmove', function(e) {
+                const tag = (e.target.tagName || '').toLowerCase();
+                if (tag === 'input' || tag === 'textarea') return; // allow typing gestures
+
+                const touchY = e.touches[0].clientY;
+                const touchDiff = touchY - touchStartY;
+                const scrollableElement = e.target.closest(
+                    '#messagesArea, #contactsList, #contactSidebar, #starredList, #chatSearchBarMobile');
+                if (scrollableElement && scrollableElement.scrollTop === 0 && touchDiff > 0) {
+                    e.preventDefault();
+                }
+            }, {
+                passive: false
+            });
+
+
+            // Initialize everything
+            document.addEventListener('DOMContentLoaded', function() {
+                lockViewport();
+                initializeLayout();
+                handleAndroidChrome();
+
+                // Re-initialize after a short delay to ensure all elements are rendered
+                setTimeout(initializeLayout, 500);
+            });
+
+            // Handle page visibility changes
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) {
+                    setTimeout(initializeLayout, 100);
+                }
+            });
+
+            // iOS standalone mode optimizations
+            if (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
+                document.documentElement.classList.add('standalone-mode');
+            }
+
+        })();
+    </script>
+
+
+
+
+    <script>
+        (function() {
+            let toggleLock = false;
+
+            function safeToggle(fn) {
+                if (toggleLock) return;
+                toggleLock = true;
+                try {
+                    fn();
+                } finally {
+                    setTimeout(() => toggleLock = false, 220);
+                }
+            }
+
+            function recalcPadding() {
+                const header = document.getElementById('chat-header');
+                const composer = document.getElementById('chat-composer');
+                const messages = document.getElementById('messagesArea');
+                if (!header || !composer || !messages) return;
+                messages.style.paddingTop = ((header.offsetHeight || 72) + 16) + 'px';
+                messages.style.paddingBottom = ((composer.offsetHeight || 64) + 16) + 'px';
+            }
+
+            function focusSearchInput() {
+                const $inp = $('#chatSearchInputMobile');
+                $inp.val('');
+                // double-RAF to ensure element is visible before focus (iOS safe)
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        // IMPORTANT: no preventDefault on the triggering event
+                        $inp.focus({
+                            preventScroll: true
+                        });
+                        const el = $inp[0];
+                        if (el && el.setSelectionRange) {
+                            try {
+                                el.setSelectionRange(el.value.length, el.value.length);
+                            } catch (e) {}
+                        }
+                        // make sure it’s onscreen
+                        el?.scrollIntoView({
+                            block: 'center',
+                            inline: 'nearest'
+                        });
+                        recalcPadding();
+                    });
+                });
+            }
+
+            function openMobileSearch() {
+                $('#chatSearchBarMobile').removeClass('hidden');
+                focusSearchInput();
+            }
+
+            function closeMobileSearch() {
+                $('#chatSearchBarMobile').addClass('hidden');
+                setTimeout(recalcPadding, 20);
+            }
+
+            // 🔁 SINGLE handler: pointerdown (fast + reliable)
+            //   $(document).on('pointerdown', '#chatSearchBtn', function(e){
+            //     // DO NOT call preventDefault here; it blocks keyboard on iOS
+            //     e.stopPropagation();
+            //     safeToggle(()=>{
+            //       const hidden = $('#chatSearchBarMobile').hasClass('hidden');
+            //       hidden ? openMobileSearch() : closeMobileSearch();
+            //     });
+            //   });
+
+            $(document).off('pointerdown', '#chatSearchBtn'); // remove old
+            $(document).on('pointerdown', '#chatSearchBtn', function(e) {
+                e.stopPropagation();
+                const isDesktop = window.matchMedia('(min-width: 768px)').matches;
+
+                if (isDesktop) {
+                    // Desktop inline search toggle
+                    const $inp = $('#chatSearchInputDesktop');
+                    const $close = $('#chatSearchCloseDesktop');
+                    const $res = $('#chatSearchResultsDesktop');
+                    const willOpen = $inp.hasClass('hidden');
+
+                    if (willOpen) {
+                        $('#chatSearchAreaDesktop').removeClass('hidden');
+                        $inp.removeClass('hidden').val('').focus();
+                        $close.removeClass('hidden');
+                        $res.addClass('hidden').empty();
+                    } else {
+                        $inp.addClass('hidden').val('');
+                        $close.addClass('hidden');
+                        $res.addClass('hidden').empty();
+                    }
+                } else {
+                    // Mobile full-width search
+                    const hidden = $('#chatSearchBarMobile').hasClass('hidden');
+                    if (hidden) {
+                        $('#chatSearchBarMobile').removeClass('hidden');
+                        requestAnimationFrame(() => {
+                            const $m = $('#chatSearchInputMobile');
+                            $m.val('').focus({
+                                preventScroll: true
+                            });
+                            const el = $m[0];
+                            try {
+                                el && el.setSelectionRange(el.value.length, el.value.length);
+                            } catch (_) {}
+                        });
+                    } else {
+                        $('#chatSearchBarMobile').addClass('hidden');
+                    }
+                }
+            });
+
+
+            // Sidebar search button: always open (+ close contact info)
+            $(document).on('pointerdown', '#chatSearchBtn2', function(e) {
+                e.stopPropagation();
+                safeToggle(() => {
+                    try {
+                        closeContactInfo && closeContactInfo();
+                    } catch (_) {}
+                    openMobileSearch();
+                    setTimeout(() => $(window).trigger('resize'), 50);
+                });
+            });
+        })();
+
+
+        // Prevent button from stealing focus (keyboard open rahe)
+        $(document).on('mousedown touchstart pointerdown', '#sendBtn', function(e) {
+            e.preventDefault();
+        });
+
+
+
+        // show image inside the chat
+        function showImagePreview(url) {
+            document.getElementById('previewImage').src = url;
+            document.getElementById('downloadImageBtn').href = url; // ✅ Enables downloading
+            document.getElementById('imagePreviewModal').classList.remove('hidden');
+        }
+
+        function closeImagePreview() {
+            document.getElementById('imagePreviewModal').classList.add('hidden');
+        }
+    </script>
+
+
+
+
 </body>
 
 </html>
