@@ -398,7 +398,7 @@ class WhatsappService
 
             $formated_crm_data = $format_data_service->formatResponse($conversation->email);
             $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data, $userImageUrls);
-             Log::error('Response from gpt: ', $replyHtml );
+            Log::error('Response from gpt: ', $replyHtml);
             $replyText = $this->htmlToWhatsappText($replyHtml);
             // $replyText = $replyHtml;
             // Send reply into your chat & WhatsApp
@@ -505,35 +505,18 @@ class WhatsappService
         $threadId = $this->getOrCreateThreadId($userNumber);
 
         // ✅ Send combined context + user message
-        $addMessageToThread = function (string $threadId) use ($userText, $crmData, $imageUrls) {
+        $addMessageToThread = function (string $threadId) use ($userText, $crmData) {
             $contextText = "```json\n" . json_encode($crmData, JSON_PRETTY_PRINT) . "\n```";
 
-            $messageContent = [];
-
-            // ✅ ALWAYS place text FIRST (if exists)
-            if (!empty($userText)) {
-                $messageContent[] = [
+            // ✅ Always send exactly ONE text block
+            $messageContent = [
+                [
                     'type' => 'text',
-                    'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n{$userText}"
-                ];
-            }
+                    'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n" . ($userText ?: '[NO USER TEXT]')
+                ]
+            ];
 
-            if ($imageUrls) {
-                foreach ($imageUrls as $url) {
-                    $messageContent[] = [
-                        'type' => 'image_url',
-                        'image_url' => ['url' => $url]
-                    ];
-                }
-            }
-
-            // ✅ If no text at all, send a simple note
-            if (empty($messageContent)) {
-                $messageContent[] = [
-                    'type' => 'text',
-                    'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_SENT_ONLY_IMAGE"
-                ];
-            }
+            Log::info('Sending TEXT-ONLY payload to GPT:', $messageContent);
 
             return Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
