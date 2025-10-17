@@ -307,8 +307,7 @@ class WhatsappService
     public function handleIncoming(Request $request)
     {
         // Log::info('WhatsApp webhook payload:', $request->all());
-        $mediaPaths = [];
-        $numMedia = (int) $request->input('NumMedia', 0);
+
         // Normalise WhatsApp number and find Twilio Conversation SID
         $userNumber = str_replace('whatsapp:', '', (string) $request->input('From', ''));
 
@@ -321,66 +320,19 @@ class WhatsappService
             'last_message' => Carbon::now(),
         ]);
 
-        if ($numMedia > 0) {
-            for ($i = 0; $i < $numMedia; $i++) {
-                $mediaUrl = $request->input("MediaUrl{$i}");
-                $mediaType = $request->input("MediaContentType{$i}");
-
-                // Download from Twilio
-                $response = Http::withBasicAuth(
-                    $this->TWILIO_ACCOUNT_SID,
-                    $this->TWILIO_AUTH_TOKEN
-                )->get($mediaUrl);
-
-                $extension = match ($mediaType) {
-                    'image/png' => 'png',
-                    'image/jpeg' => 'jpg',
-                    default => 'bin',
-                };
-
-                $filename = 'whatsapp_' . now()->timestamp . "_{$i}." . $extension;
-
-                // ✅ Save directly to public/uploads
-                $publicPath = public_path("uploads/{$filename}");
-                file_put_contents($publicPath, $response->body());
-
-                $publicUrl = asset("uploads/{$filename}");
-
-                $mediaPaths[] = [
-                    'image' => $publicUrl,
-                    'mime_type' => $mediaType,
-                ];
-            }
-
-            $userText = trim((string) $request->input('Body', ''));  // ✅ Capture caption
-
-            ChatHistory::create([
-                'conversation_sid' => $conversationSid ?? null,
-                'body' => $userText !== '' ? $userText : '[Image Received]',  // ✅ Store caption if available
-                'author' => 'user',
-                'attachments' => json_encode($mediaPaths),
-                'has_images' => true,
-                'date_created' => now(),
-            ]);
-
-            $userImageUrls = array_column($mediaPaths, 'image');
-        } else {
-            $userImageUrls = null;
-            $userText = trim((string) $request->input('Body', ''));
-            if ($userText === '') {
-                return response()->noContent();
-            }
-            ChatHistory::create([
-                'conversation_sid' => $conversationSid,
-                'body' => $userText,
-                'author' => 'user',
-                'date_created' => Carbon::now()->toDateTimeString(),
-            ]);
-        }
         $userText = trim((string) $request->input('Body', ''));
+        if ($userText === '') {
+            return response()->noContent();
+        }
+
         // Emit user message to your UI
         event(new MessageSent($userText, $conversationSid, 'user'));
-
+        ChatHistory::create([
+            'conversation_sid' => $conversationSid,
+            'body' => $userText,
+            'author' => 'user',
+            'date_created' => Carbon::now()->toDateTimeString(),
+        ]);
         $chatControll = ChatControll::where('sid', $conversationSid)->first();
         $chatControll->update([
             'unread' => true,
@@ -397,8 +349,7 @@ class WhatsappService
             $format_data_service = new FormatResponseService();
 
             $formated_crm_data = $format_data_service->formatResponse($conversation->email);
-            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data, $userImageUrls);
-            Log::error('Response from gpt: ', $replyHtml);
+            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data);
             $replyText = $this->htmlToWhatsappText($replyHtml);
             // $replyText = $replyHtml;
             // Send reply into your chat & WhatsApp
@@ -499,7 +450,7 @@ class WhatsappService
     /**
      * Run the Assistant on the user’s thread and return the latest assistant HTML.
      */
-    protected function runAssistantAndGetReply(string $userNumber, ?string $userText, array $crmData, ?array $imageUrls = null): string
+    protected function runAssistantAndGetReply(string $userNumber, string $userText, array $crmData): string
     {
         // Get (or create) the OpenAI thread id using ONLY getOrCreateThreadId
         $threadId = $this->getOrCreateThreadId($userNumber);
@@ -508,24 +459,18 @@ class WhatsappService
         $addMessageToThread = function (string $threadId) use ($userText, $crmData) {
             $contextText = "```json\n" . json_encode($crmData, JSON_PRETTY_PRINT) . "\n```";
 
-            // ✅ Always send exactly ONE text block
-            $messageContent = [
-                [
-                    'type' => 'text',
-                    'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n" . ($userText ?: '[NO USER TEXT]')
-                ]
-            ];
+            $content = "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n{$userText}";
 
-            Log::info('Sending TEXT-ONLY payload to GPT:', $messageContent);
-
-            return Http::withHeaders([
+            $resp = Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
                 'Content-Type' => 'application/json',
                 'OpenAI-Beta' => 'assistants=v2',
             ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
                 'role' => 'user',
-                'content' => $messageContent,
+                'content' => $content,
             ]);
+
+            return $resp;
         };
 
         // Add the incoming user message; if the thread was purged, recreate using ONLY getOrCreateThreadId
@@ -558,12 +503,12 @@ class WhatsappService
             'OpenAI-Beta' => 'assistants=v2',
         ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", $runCreatePayload);
 
-        // Log::debug('Assistants: run created', [
-        //     'thread_id' => $threadId,
-        //     'status' => $run->status(),
-        //     'ok' => $run->ok(),
-        //     'body' => $run->json(),
-        // ]);
+        Log::debug('Assistants: run created', [
+            'thread_id' => $threadId,
+            'status' => $run->status(),
+            'ok' => $run->ok(),
+            'body' => $run->json(),
+        ]);
 
         if (!$run->ok()) {
             throw new \RuntimeException('Failed to create run: ' . $run->body());
