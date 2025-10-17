@@ -398,7 +398,7 @@ class WhatsappService
 
             $formated_crm_data = $format_data_service->formatResponse($conversation->email);
             $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data, $userImageUrls);
-            // dd($replyHtml);
+             Log::error('Response from gpt: ', $replyHtml );
             $replyText = $this->htmlToWhatsappText($replyHtml);
             // $replyText = $replyHtml;
             // Send reply into your chat & WhatsApp
@@ -534,7 +534,6 @@ class WhatsappService
                     'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_SENT_ONLY_IMAGE"
                 ];
             }
-Log::info('Payload sent to GPT:', $messageContent);
 
             return Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
