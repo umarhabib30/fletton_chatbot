@@ -510,6 +510,14 @@ class WhatsappService
 
             $messageContent = [];
 
+            // ✅ ALWAYS place text FIRST (if exists)
+            if (!empty($userText)) {
+                $messageContent[] = [
+                    'type' => 'text',
+                    'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n{$userText}"
+                ];
+            }
+
             if ($imageUrls) {
                 foreach ($imageUrls as $url) {
                     $messageContent[] = [
@@ -519,28 +527,22 @@ class WhatsappService
                 }
             }
 
-            if (!empty($userText)) {
-                $messageContent[] = [
-                    'type' => 'text',
-                    'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n{$userText}"
-                ];
-            } else {
+            // ✅ If no text at all, send a simple note
+            if (empty($messageContent)) {
                 $messageContent[] = [
                     'type' => 'text',
                     'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_SENT_ONLY_IMAGE"
                 ];
             }
 
-            $resp = Http::withHeaders([
+            return Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
                 'Content-Type' => 'application/json',
                 'OpenAI-Beta' => 'assistants=v2',
             ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
                 'role' => 'user',
-                'content' => $messageContent,  // ✅ FIXED: Use $messageContent, not $content
+                'content' => $messageContent,
             ]);
-
-            return $resp;
         };
 
         // Add the incoming user message; if the thread was purged, recreate using ONLY getOrCreateThreadId
