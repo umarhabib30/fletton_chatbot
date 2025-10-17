@@ -31,3 +31,4 @@ auth.json
 
 database/seeders/CredentialSeeder.php
 
+public/uploads

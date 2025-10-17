@@ -326,7 +326,7 @@ class WhatsappService
                 $mediaUrl = $request->input("MediaUrl{$i}");
                 $mediaType = $request->input("MediaContentType{$i}");
 
-                // download file from Twilio
+                // Download from Twilio
                 $response = Http::withBasicAuth(
                     $this->TWILIO_ACCOUNT_SID,
                     $this->TWILIO_AUTH_TOKEN
@@ -339,10 +339,12 @@ class WhatsappService
                 };
 
                 $filename = 'whatsapp_' . now()->timestamp . "_{$i}." . $extension;
-                $storagePath = storage_path("app/public/uploads/{$filename}");
-                file_put_contents($storagePath, $response->body());
 
-                $publicUrl = asset("storage/uploads/{$filename}");
+                // ✅ Save directly to public/uploads
+                $publicPath = public_path("uploads/{$filename}");
+                file_put_contents($publicPath, $response->body());
+
+                $publicUrl = asset("uploads/{$filename}");
 
                 $mediaPaths[] = [
                     'image' => $publicUrl,
@@ -350,16 +352,18 @@ class WhatsappService
                 ];
             }
 
-            $history = ChatHistory::create([
+            $userText = trim((string) $request->input('Body', ''));  // ✅ Capture caption
+
+            ChatHistory::create([
                 'conversation_sid' => $conversationSid ?? null,
-                'body' => '[Image Received]',
+                'body' => $userText !== '' ? $userText : '[Image Received]',  // ✅ Store caption if available
                 'author' => 'user',
                 'attachments' => json_encode($mediaPaths),
                 'has_images' => true,
                 'date_created' => now(),
             ]);
+
             $userImageUrls = array_column($mediaPaths, 'image');
-            $userText = trim((string) $request->input('Body', ''));
         } else {
             $userImageUrls = null;
             $userText = trim((string) $request->input('Body', ''));
