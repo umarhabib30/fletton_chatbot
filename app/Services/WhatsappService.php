@@ -534,6 +534,7 @@ class WhatsappService
                     'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_SENT_ONLY_IMAGE"
                 ];
             }
+Log::info('Payload sent to GPT:', $messageContent);
 
             return Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
@@ -575,12 +576,12 @@ class WhatsappService
             'OpenAI-Beta' => 'assistants=v2',
         ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", $runCreatePayload);
 
-        Log::debug('Assistants: run created', [
-            'thread_id' => $threadId,
-            'status' => $run->status(),
-            'ok' => $run->ok(),
-            'body' => $run->json(),
-        ]);
+        // Log::debug('Assistants: run created', [
+        //     'thread_id' => $threadId,
+        //     'status' => $run->status(),
+        //     'ok' => $run->ok(),
+        //     'body' => $run->json(),
+        // ]);
 
         if (!$run->ok()) {
             throw new \RuntimeException('Failed to create run: ' . $run->body());
