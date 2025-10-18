@@ -1141,6 +1141,16 @@
                     $contact.find('span.unread-badge').text(function(i, oldText) {
                         return oldText === '' ? '1' : (parseInt(oldText) + 1).toString();
                     }).removeClass('hidden');
+
+                     $.ajax({
+                        url: "{{ url('send-notification') }}",
+                        method: "POST",
+                        data: {
+                            _token: "{{ csrf_token() }}",
+                            sid: data.sid,
+                            body: data.message
+                        }
+                    });
                 }
 
                 $contact.prependTo('#contactsList');
@@ -2673,8 +2683,66 @@
         }
     </script>
 
+    {{-- fcm notifications --}}
+    <script src="https://www.gstatic.com/firebasejs/7.23.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/7.23.0/firebase-messaging.js"></script>
+    <script>
+        $(document).ready(function() {
+            initFirebaseMessagingRegistration();
+        });
 
+        const firebaseConfig = {
+            apiKey: "AIzaSyAZCa6o-DPX4NWxjZJlBIzKnjrlDz3l7YM",
+            authDomain: "flettonchatbot.firebaseapp.com",
+            projectId: "flettonchatbot",
+            storageBucket: "flettonchatbot.appspot.com", // fix
+            messagingSenderId: "691698478961",
+            appId: "1:691698478961:web:293a80ed82b837e32210d0",
+            measurementId: "G-E6G35MR752"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const messaging = firebase.messaging();
 
+        const VAPID_PUBLIC_KEY = "BEIGavZ1af_gFgl-yRjgvgg-d6ID8rThq__zgFCJ4pVzLGXw4v6bQdVZGIvm9frMVqIabhzmBDiZ9CDy4u85La8";
+
+        navigator.serviceWorker.register('/firebase-messaging-sw.js').then(async (registration) => {
+            window.initFirebaseMessagingRegistration = async () => {
+                try {
+                    const perm = await Notification.requestPermission();
+                    if (perm !== 'granted') {
+                        console.warn('Permission not granted');
+                        return;
+                    }
+                    const token = await messaging.getToken({
+                        vapidKey: VAPID_PUBLIC_KEY,
+                        serviceWorkerRegistration: registration
+                    });
+                    console.log('FCM token:', token);
+                    $.post('{{ route('save-token') }}', {
+                            _token: '{{ csrf_token() }}',
+                            token
+                        })
+                        .done(() => console.log('Token saved successfully.'))
+                        .fail((e) => console.error('Save token error', e));
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+
+            // Foreground messages -> show manually
+            messaging.onMessage((payload) => {
+                console.log('onMessage:', payload);
+                const d = payload.data || {};
+                const title = d.title || 'Notification';
+                const options = {
+                    body: d.body || '',
+                    icon: d.icon
+                };
+                new Notification(title, options);
+            });
+
+        }).catch(err => console.error('SW registration failed:', err));
+    </script>
 
 </body>
 

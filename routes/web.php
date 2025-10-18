@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\SendTemplateController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\FcmNotificationController;
 use App\Http\Controllers\WhatsAppController;
 use Illuminate\Support\Facades\Route;
 
@@ -65,4 +66,6 @@ Route::group(['middleware' => ['auth']], function () {
 });
 
 
-
+// fcm notifications
+Route::post('/save-token', [FcmNotificationController::class, 'saveToken'])->name('save-token');
+Route::post('/send-notification', [FcmNotificationController::class, 'sendNotification'])->name('send.notification');
