@@ -323,6 +323,11 @@ class WhatsappService
         $mediaPaths = [];
         $numMedia = (int) $request->input('NumMedia', 0);
 
+        $userText = trim((string) $request->input('Body', ''));
+        if ($userText === '' && $numMedia <= 0) {
+            return response()->noContent();
+        }
+
         if ($numMedia > 0) {
             for ($i = 0; $i < $numMedia; $i++) {
                 $mediaUrl = $request->input("MediaUrl{$i}");
@@ -373,19 +378,16 @@ class WhatsappService
             ]);
         }
 
-        $userText = trim((string) $request->input('Body', ''));
-        if ($userText === '' && $numMedia <= 0) {
-            return response()->noContent();
-        }
-
         // Emit user message to your UI
         event(new MessageSent($userText, $conversationSid, 'user'));
-        ChatHistory::create([
-            'conversation_sid' => $conversationSid,
-            'body' => $userText,
-            'author' => 'user',
-            'date_created' => Carbon::now()->toDateTimeString(),
-        ]);
+        if ($userText != '') {
+            ChatHistory::create([
+                'conversation_sid' => $conversationSid,
+                'body' => $userText,
+                'author' => 'user',
+                'date_created' => Carbon::now()->toDateTimeString(),
+            ]);
+        }
         $chatControll = ChatControll::where('sid', $conversationSid)->first();
         $chatControll->update([
             'unread' => true,
