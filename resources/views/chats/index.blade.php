@@ -665,8 +665,7 @@
                         </div>
                         <div class="flex-1">
                             <h3 class="font-semibold wa-text-primary">Flettons</h3>
-                            <button onclick="initFirebaseMessagingRegistration()">Enable Notifications</button>
-
+                            
                         </div>
                     </div>
                     <div class="flex items-center space-x-2">
