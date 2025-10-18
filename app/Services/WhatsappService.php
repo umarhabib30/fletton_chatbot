@@ -320,8 +320,60 @@ class WhatsappService
             'last_message' => Carbon::now(),
         ]);
 
+        $mediaPaths = [];
+        $numMedia = (int) $request->input('NumMedia', 0);
+
+        if ($numMedia > 0) {
+            for ($i = 0; $i < $numMedia; $i++) {
+                $mediaUrl = $request->input("MediaUrl{$i}");
+                $mediaType = $request->input("MediaContentType{$i}");
+
+                // ✅ Download file from Twilio using stored credentials
+                $response = Http::withBasicAuth(
+                    $this->TWILIO_ACCOUNT_SID,
+                    $this->TWILIO_AUTH_TOKEN
+                )->get($mediaUrl);
+
+                if (!$response->ok()) {
+                    Log::error('Failed to download Twilio media', [
+                        'url' => $mediaUrl,
+                        'status' => $response->status(),
+                        'body' => $response->body(),
+                    ]);
+                    continue;
+                }
+
+                $extension = match ($mediaType) {
+                    'image/png' => 'png',
+                    'image/jpeg' => 'jpg',
+                    default => 'bin',
+                };
+
+                $filename = 'whatsapp_' . now()->timestamp . "_{$i}." . $extension;
+                $storagePath = public_path("uploads/{$filename}");
+                file_put_contents($storagePath, $response->body());
+
+                $publicUrl = asset("uploads/{$filename}");
+
+                $mediaPaths[] = [
+                    'local_path' => $storagePath,
+                    'image' => $publicUrl,
+                    'mime_type' => $mediaType,
+                ];
+            }
+
+            // Optionally save to chat history
+            ChatHistory::create([
+                'conversation_sid' => $conversationSid ?? null,
+                'body' => '[Image Received]',
+                'author' => 'user',
+                'attachments' => json_encode($mediaPaths),
+                'date_created' => now(),
+            ]);
+        }
+
         $userText = trim((string) $request->input('Body', ''));
-        if ($userText === '') {
+        if ($userText === '' && $numMedia <= 0) {
             return response()->noContent();
         }
 
@@ -349,7 +401,8 @@ class WhatsappService
             $format_data_service = new FormatResponseService();
 
             $formated_crm_data = $format_data_service->formatResponse($conversation->email);
-            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data);
+            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data, $mediaPaths);
+            // dd($replyHtml);
             $replyText = $this->htmlToWhatsappText($replyHtml);
             // $replyText = $replyHtml;
             // Send reply into your chat & WhatsApp
@@ -450,27 +503,79 @@ class WhatsappService
     /**
      * Run the Assistant on the user’s thread and return the latest assistant HTML.
      */
-    protected function runAssistantAndGetReply(string $userNumber, string $userText, array $crmData): string
+    protected function runAssistantAndGetReply(string $userNumber, string $userText, array $crmData, $mediaPaths): string
     {
         // Get (or create) the OpenAI thread id using ONLY getOrCreateThreadId
         $threadId = $this->getOrCreateThreadId($userNumber);
 
         // ✅ Send combined context + user message
-        $addMessageToThread = function (string $threadId) use ($userText, $crmData) {
+        $addMessageToThread = function (string $threadId) use ($userText, $crmData, $mediaPaths) {
+            $file_ids = [];
+            if (!empty($mediaPaths)) {
+                foreach ($mediaPaths as $path) {
+                    $localImagePath = $path['local_path'];
+
+                    if (file_exists($localImagePath)) {
+                        $fileUpload = Http::withHeaders([
+                            'Authorization' => "Bearer {$this->openAiKey}",
+                            'OpenAI-Beta' => 'assistants=v2',
+                        ])
+                            ->attach('file', file_get_contents($localImagePath), basename($localImagePath))
+                            ->post('https://api.openai.com/v1/files', ['purpose' => 'vision']);
+
+                        if ($fileId = data_get($fileUpload->json(), 'id')) {
+                            $file_ids[] = $fileId;
+                        }
+                    }
+                }
+            }
+
             $contextText = "```json\n" . json_encode($crmData, JSON_PRETTY_PRINT) . "\n```";
 
-            $content = "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n{$userText}";
+            // ✅ Build content dynamically
+            $contentBlocks = [];
 
-            $resp = Http::withHeaders([
+            // If there is user text, always send it first
+            if (!empty($userText)) {
+                $contentBlocks[] = [
+                    'type' => 'text',
+                    'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n{$userText}"
+                ];
+            }
+
+            // If there are images, append them
+            foreach ($file_ids as $fid) {
+                $contentBlocks[] = [
+                    'type' => 'image_file',
+                    'image_file' => ['file_id' => $fid]
+                ];
+            }
+
+            // If no text and only images → add fallback text
+            if (empty($userText) && !empty($file_ids)) {
+                array_unshift($contentBlocks, [
+                    'type' => 'text',
+                    'text' => 'User sent an image files please read the thread and relate these files and generate response accordingly'
+                ]);
+            }
+
+            // If content still empty (shouldn’t happen), prevent API error
+            if (empty($contentBlocks)) {
+                $contentBlocks[] = [
+                    'type' => 'text',
+                    'text' => 'No valid message provided'
+                ];
+            }
+
+            // ✅ Send properly formatted message
+            return Http::withHeaders([
                 'Authorization' => "Bearer {$this->openAiKey}",
                 'Content-Type' => 'application/json',
                 'OpenAI-Beta' => 'assistants=v2',
             ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
                 'role' => 'user',
-                'content' => $content,
+                'content' => $contentBlocks,
             ]);
-
-            return $resp;
         };
 
         // Add the incoming user message; if the thread was purged, recreate using ONLY getOrCreateThreadId
