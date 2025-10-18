@@ -368,6 +368,7 @@ class WhatsappService
                 'body' => '[Image Received]',
                 'author' => 'user',
                 'attachments' => json_encode($mediaPaths),
+                'has_images' => true,
                 'date_created' => now(),
             ]);
         }
