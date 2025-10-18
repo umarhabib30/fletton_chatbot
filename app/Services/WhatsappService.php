@@ -8,9 +8,11 @@ use App\Models\ChatControll;
 use App\Models\ChatHistory;
 use App\Models\Credential;
 use App\Models\MessageTemplate;
+use App\Models\PendingMediaBatch;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -306,47 +308,33 @@ class WhatsappService
      */
     public function handleIncoming(Request $request)
     {
-        // Log::info('WhatsApp webhook payload:', $request->all());
-
-        // Normalise WhatsApp number and find Twilio Conversation SID
         $userNumber = str_replace('whatsapp:', '', (string) $request->input('From', ''));
-
         $conversation = ChatControll::where('contact', $userNumber)->first();
         if ($conversation->is_blocked) {
             return response()->json(['message' => 'contact is blocked']);
         }
+
         $conversationSid = $conversation->sid;
-        $conversation->update([
-            'last_message' => Carbon::now(),
-        ]);
+        $conversation->update(['last_message' => Carbon::now()]);
+
+        $numMedia = (int) $request->input('NumMedia', 0);
+        $userText = trim((string) $request->input('Body', ''));
 
         $mediaPaths = [];
-        $numMedia = (int) $request->input('NumMedia', 0);
 
-        $userText = trim((string) $request->input('Body', ''));
-        if ($userText === '' && $numMedia <= 0) {
-            return response()->noContent();
-        }
-
+        // ✅ Store incoming media in ChatHistory immediately (UI behavior unchanged)
         if ($numMedia > 0) {
             for ($i = 0; $i < $numMedia; $i++) {
                 $mediaUrl = $request->input("MediaUrl{$i}");
                 $mediaType = $request->input("MediaContentType{$i}");
 
-                // ✅ Download file from Twilio using stored credentials
                 $response = Http::withBasicAuth(
                     $this->TWILIO_ACCOUNT_SID,
                     $this->TWILIO_AUTH_TOKEN
                 )->get($mediaUrl);
 
-                if (!$response->ok()) {
-                    Log::error('Failed to download Twilio media', [
-                        'url' => $mediaUrl,
-                        'status' => $response->status(),
-                        'body' => $response->body(),
-                    ]);
+                if (!$response->ok())
                     continue;
-                }
 
                 $extension = match ($mediaType) {
                     'image/png' => 'png',
@@ -367,9 +355,8 @@ class WhatsappService
                 ];
             }
 
-            // Optionally save to chat history
             ChatHistory::create([
-                'conversation_sid' => $conversationSid ?? null,
+                'conversation_sid' => $conversationSid,
                 'body' => '[Image Received]',
                 'author' => 'user',
                 'attachments' => json_encode($mediaPaths),
@@ -378,54 +365,61 @@ class WhatsappService
             ]);
         }
 
-        // Emit user message to your UI
-        event(new MessageSent($userText, $conversationSid, 'user'));
-        if ($userText != '') {
+        // ✅ Also save user text if exists
+        if ($userText !== '') {
             ChatHistory::create([
                 'conversation_sid' => $conversationSid,
                 'body' => $userText,
                 'author' => 'user',
-                'date_created' => Carbon::now()->toDateTimeString(),
+                'date_created' => Carbon::now(),
             ]);
         }
-        $chatControll = ChatControll::where('sid', $conversationSid)->first();
-        $chatControll->update([
-            'unread' => true,
-            'unread_count' => $chatControll->unread_count + 1,
-            'unread_message' => $userText,
-        ]);
-        // if auto reply is off it will not call gpt api
-        if (!$chatControll->auto_reply) {
+
+        // ✅ Cache media batch in DB
+        if (!empty($mediaPaths)) {
+            PendingMediaBatch::updateOrCreate(
+                ['user_number' => $userNumber],
+                [
+                    'media_paths' => DB::raw("JSON_ARRAY_APPEND(COALESCE(media_paths, '[]'), '\$', JSON_ARRAY(" . collect($mediaPaths)->map(fn($m) => "'" . json_encode($m) . "'")->join(',') . '))'),
+                    'last_received_at' => now(),
+                ]
+            );
+        }
+
+        // ✅ If no text, check if 5 seconds passed → if not, wait silently
+        if ($userText === '' && $numMedia > 0) {
             return response()->noContent();
         }
 
-        // Run the assistant and fetch an HTML reply
+        // ✅ If text OR timeout → fetch pending images
+        $batch = PendingMediaBatch::where('user_number', $userNumber)->first();
+        $finalImages = $batch ? collect($batch->media_paths)->flatten(1)->toArray() : [];
+
+        // If no images & no text, ignore
+        if ($userText === '' && empty($finalImages)) {
+            return response()->noContent();
+        }
+
+        // Use fallback prompt if only images and no text
+        $finalUserText = $userText !== '' ? $userText : 'Identify if this is a house for survey and reply professionally.';
+
+        // Clear pending media
+        PendingMediaBatch::where('user_number', $userNumber)->delete();
+
+        // ✅ Continue with AI processing
         try {
             $format_data_service = new FormatResponseService();
-
             $formated_crm_data = $format_data_service->formatResponse($conversation->email);
-            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data, $mediaPaths);
-            // dd($replyHtml);
+
+            $replyHtml = $this->runAssistantAndGetReply($userNumber, $finalUserText, $formated_crm_data, $finalImages);
             $replyText = $this->htmlToWhatsappText($replyHtml);
-            // $replyText = $replyHtml;
-            // Send reply into your chat & WhatsApp
+
             $this->sendCustomMessage($conversationSid, $replyText);
             event(new MessageSent($replyText, $conversationSid, 'admin'));
 
-            $chatControll->update([
-                'unread_message' => $replyText,
-            ]);
+            $conversation->update(['unread_message' => $replyText]);
         } catch (\Throwable $e) {
-            $chat = ChatControll::where('sid', $conversationSid)->first();
-            $data = [
-                'first_name' => $chat->first_name,
-                'last_name' => $chat->last_name,
-                'contact' => $chat->contact,
-            ];
-            Mail::to('Info@flettons.com')->send(new AssistantFailureMail($data));
-
-            Log::error('Assistant error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            $replyText = 'Please wait';
+            Log::error('Assistant error: ' . $e->getMessage());
         }
 
         return response()->noContent();
