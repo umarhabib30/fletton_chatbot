@@ -32,3 +32,6 @@ auth.json
 database/seeders/CredentialSeeder.php
 
 public/uploads
+
+/public/firebase-service-account.json
+/storage/app/firebase-service-account.json
