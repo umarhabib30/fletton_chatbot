@@ -56,9 +56,6 @@ class FcmNotificationController extends Controller
         $sent = 0;
         $failed = 0;
         foreach ($tokens as $t) {
-            if($sent > 0){
-                break;
-            }
             $payload = [
                 'message' => [
                     'token' => $t,
