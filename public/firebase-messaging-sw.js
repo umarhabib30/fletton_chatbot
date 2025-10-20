@@ -1,7 +1,10 @@
-// public/firebase-messaging-sw.js
-importScripts('https://www.gstatic.com/firebasejs/7.23.0/firebase-app.js');
-importScripts('https://www.gstatic.com/firebasejs/7.23.0/firebase-messaging.js');
+/* public/firebase-messaging-sw.js */
 
+// Use compat builds for simplicity across all devices
+importScripts('https://www.gstatic.com/firebasejs/9.6.11/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.6.11/firebase-messaging-compat.js');
+
+// Your Firebase config
 firebase.initializeApp({
     apiKey: "AIzaSyAZCa6o-DPX4NWxjZJlBIzKnjrlDz3l7YM",
     authDomain: "flettonchatbot.firebaseapp.com",
@@ -14,22 +17,40 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Background notifications (tab not focused)
-messaging.setBackgroundMessageHandler(function (payload) {
+// ✅ Background message (Android & Desktop)
+messaging.onBackgroundMessage(function (payload) {
+    console.log('[firebase-messaging-sw.js] Received background message ', payload);
+
     const n = payload.notification || {};
     const d = payload.data || {};
-    const title = n.title || d.title || 'Background Message';
+
+    const title = n.title || d.title || 'Notification';
     const options = {
         body: n.body || d.body || '',
-        icon: n.icon || d.icon || '/favicon.ico',
-        data: { url: (payload.webpush?.fcm_options?.link) || '/' }
+        icon: n.icon || d.icon || '/logo.png',
+        data: {
+            url: (payload.webpush?.fcm_options?.link) || d.click_action || '/'
+        }
     };
+
     return self.registration.showNotification(title, options);
 });
 
+// ✅ iOS-compatible notification click (PWA)
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const url = event.notification.data?.url || '/';
-    event.waitUntil(clients.openWindow(url));
-});
+    const target = event.notification.data?.url || '/';
 
+    event.waitUntil(
+        clients.matchAll({ type: "window", includeUncontrolled: true }).then(clientList => {
+            for (const client of clientList) {
+                if (client.url.includes(self.location.origin) && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            if (clients.openWindow) {
+                return clients.openWindow(target);
+            }
+        })
+    );
+});

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ChatControll;
 use App\Models\ChatHistory;
 use App\Models\User;
+use App\Models\UserDeviceToken;
 use App\Services\FcmAccessToken;
 use GuzzleHttp\Client;
 use Illuminate\Http\Request;
@@ -15,10 +16,12 @@ class FcmNotificationController extends Controller
 {
     public function saveToken(Request $request)
     {
-        $user = User::find(Auth::user()->id);
-        $user->update(['device_token' => $request->token]);
+        UserDeviceToken::firstOrCreate([
+            'user_id' => Auth::user()->id,
+            'token' => $request->token,
+        ]);
 
-        return response()->json(['token saved successfully.']);
+        return response()->json(['message' => 'Token saved successfully.']);
     }
 
     public function sendNotification(Request $request)
@@ -29,9 +32,9 @@ class FcmNotificationController extends Controller
         ]);
 
         $chatcontrol = ChatControll::where('sid', $request->sid)->first();
-        $title = $chatcontrol->first_name .' '. $chatcontrol->last_name;
+        $title = $chatcontrol->first_name . ' ' . $chatcontrol->last_name;
 
-        $tokens = \App\Models\User::whereNotNull('device_token')->pluck('device_token')->all();
+        $tokens = UserDeviceToken::pluck('token')->all();
         if (empty($tokens)) {
             return back()->with('status', 'No device tokens found. Click "Allow for Notification" first.');
         }
