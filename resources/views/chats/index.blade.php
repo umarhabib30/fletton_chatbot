@@ -2762,14 +2762,19 @@
         messaging.onMessage((payload) => {
             console.log('onMessage:', payload);
 
-            const d = payload.data || payload.notification || {};
-            const title = d.title || 'Notification';
-            const options = {
-                body: d.body || '',
-                icon: d.icon || '/favicon.ico'
-            };
+            // Only display if app is actually in the foreground (visible)
+            if (document.visibilityState === 'visible') {
+                const d = payload.data || payload.notification || {};
+                const title = d.title || 'Notification';
+                const options = {
+                    body: d.body || '',
+                    icon: d.icon || '/favicon.ico'
+                };
 
-            new Notification(title, options);
+                new Notification(title, options);
+            } else {
+                console.log('Skipping foreground notification - handled by Service Worker');
+            }
         });
     </script>
 
