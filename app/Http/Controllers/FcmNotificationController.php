@@ -16,10 +16,13 @@ class FcmNotificationController extends Controller
 {
     public function saveToken(Request $request)
     {
-        UserDeviceToken::firstOrCreate([
-            'user_id' => Auth::user()->id,
-            'token' => $request->token,
-        ]);
+        UserDeviceToken::updateOrCreate(
+            [
+                'user_id' => Auth::id(),
+                'token' => $request->token,
+            ],
+            []  // No additional fields to update
+        );
 
         return response()->json(['message' => 'Token saved successfully.']);
     }
@@ -53,6 +56,9 @@ class FcmNotificationController extends Controller
         $sent = 0;
         $failed = 0;
         foreach ($tokens as $t) {
+            if($sent > 0){
+                break;
+            }
             $payload = [
                 'message' => [
                     'token' => $t,
