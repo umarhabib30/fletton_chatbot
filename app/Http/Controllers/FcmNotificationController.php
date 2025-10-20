@@ -37,7 +37,7 @@ class FcmNotificationController extends Controller
         $chatcontrol = ChatControll::where('sid', $request->sid)->first();
         $title = $chatcontrol->first_name . ' ' . $chatcontrol->last_name;
 
-       $tokens = UserDeviceToken::pluck('token')->unique()->values()->all();
+        $tokens = UserDeviceToken::pluck('token')->unique()->values()->all();
 
         if (empty($tokens)) {
             return back()->with('status', 'No device tokens found. Click "Allow for Notification" first.');
@@ -60,24 +60,17 @@ class FcmNotificationController extends Controller
             $payload = [
                 'message' => [
                     'token' => $t,
-                    // 1) Put fields in DATA so onMessage fires in foreground
                     'data' => [
                         'title' => $title,
                         'body' => $request->body,
                         'icon' => url('/favicon.ico'),
+                        'click_action' => url('/'),  // allow redirect
                     ],
-                    // 2) Also provide a webpush notification for background delivery
                     'webpush' => [
-                        'notification' => [
-                            'title' => $title,
-                            'body' => $request->body,
-                            'icon' => url('/favicon.ico'),
-                        ],
                         'fcm_options' => ['link' => url('/')],
                         'headers' => ['Urgency' => 'high']
                     ],
                 ],
-                'validate_only' => false,
             ];
 
             try {
