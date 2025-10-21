@@ -42,7 +42,7 @@
     <style>
         @media(max-width: 767px){
             .navbar{
-                height: 10% !important;
+                height: 5% !important;
             }
 
             .header-img{

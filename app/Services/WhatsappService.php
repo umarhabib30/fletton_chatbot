@@ -306,7 +306,7 @@ class WhatsappService
      */
     public function handleIncoming(Request $request)
     {
-        Log::info('WhatsApp webhook payload:', $request->all());
+       // Log::info('WhatsApp webhook payload:', $request->all());
 
         // Normalise WhatsApp number and find Twilio Conversation SID
         $userNumber = str_replace('whatsapp:', '', (string) $request->input('From', ''));
@@ -337,7 +337,7 @@ class WhatsappService
                 $mediaType = $payload["MediaContentType{$i}"] ?? null;
 
                 if (!$mediaUrl || !$mediaType) {
-                    Log::warning("Missing MediaUrl or MediaContentType for index {$i}");
+                   // Log::warning("Missing MediaUrl or MediaContentType for index {$i}");
                     continue;
                 }
 
@@ -348,11 +348,11 @@ class WhatsappService
                 )->get($mediaUrl);
 
                 if (!$response->ok()) {
-                    Log::error('Failed to download Twilio media', [
-                        'url' => $mediaUrl,
-                        'status' => $response->status(),
-                        'body' => $response->body(),
-                    ]);
+                   // Log::error('Failed to download Twilio media', [
+                    //     'url' => $mediaUrl,
+                    //     'status' => $response->status(),
+                    //     'body' => $response->body(),
+                    // ]);
                     continue;
                 }
 
@@ -384,11 +384,11 @@ class WhatsappService
                     'mime_type' => $mediaType,
                 ];
 
-                Log::info('Media saved successfully', [
-                    'file' => $filename,
-                    'mime' => $mediaType,
-                    'url' => $publicUrl,
-                ]);
+               // Log::info('Media saved successfully', [
+                //     'file' => $filename,
+                //     'mime' => $mediaType,
+                //     'url' => $publicUrl,
+                // ]);
             }
 
             // ✅ Optionally save all media info in chat history
@@ -450,7 +450,7 @@ class WhatsappService
             ];
             Mail::to('Info@flettons.com')->send(new AssistantFailureMail($data));
 
-            Log::error('Assistant error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+           // Log::error('Assistant error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
             $replyText = 'Please wait';
         }
 
@@ -508,12 +508,12 @@ class WhatsappService
             'OpenAI-Beta' => 'assistants=v2',
         ])->post('https://api.openai.com/v1/threads', $payload);
 
-        Log::debug('Assistants: create thread', [
-            'contact' => $userNumber,
-            'status' => $resp->status(),
-            'ok' => $resp->ok(),
-            'body' => $resp->json(),
-        ]);
+       // Log::debug('Assistants: create thread', [
+        //     'contact' => $userNumber,
+        //     'status' => $resp->status(),
+        //     'ok' => $resp->ok(),
+        //     'body' => $resp->json(),
+        // ]);
 
         if (!$resp->ok()) {
             throw new \RuntimeException('Failed to create thread: ' . $resp->body());
@@ -610,10 +610,10 @@ class WhatsappService
         // Add the incoming user message; if the thread was purged, recreate using ONLY getOrCreateThreadId
         $addMsg = $addMessageToThread($threadId);
         if ($addMsg->status() === 404) {
-            Log::warning('Assistants: thread 404, recreating', [
-                'thread_id' => $threadId,
-                'user_number' => $userNumber,
-            ]);
+           // Log::warning('Assistants: thread 404, recreating', [
+            //     'thread_id' => $threadId,
+            //     'user_number' => $userNumber,
+            // ]);
 
             // Clear the stored thread id so getOrCreateThreadId will create a fresh one
             ChatControll::where('contact', $userNumber)
@@ -637,12 +637,12 @@ class WhatsappService
             'OpenAI-Beta' => 'assistants=v2',
         ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", $runCreatePayload);
 
-        Log::debug('Assistants: run created', [
-            'thread_id' => $threadId,
-            'status' => $run->status(),
-            'ok' => $run->ok(),
-            'body' => $run->json(),
-        ]);
+       // Log::debug('Assistants: run created', [
+        //     'thread_id' => $threadId,
+        //     'status' => $run->status(),
+        //     'ok' => $run->ok(),
+        //     'body' => $run->json(),
+        // ]);
 
         if (!$run->ok()) {
             throw new \RuntimeException('Failed to create run: ' . $run->body());
@@ -666,56 +666,56 @@ class WhatsappService
             ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
 
             if (!$statusResp->ok()) {
-                Log::error('Assistants: failed to check run', [
-                    'thread_id' => $threadId,
-                    'run_id' => $runId,
-                    'status' => $statusResp->status(),
-                    'body' => $statusResp->body(),
-                ]);
+               // Log::error('Assistants: failed to check run', [
+                //     'thread_id' => $threadId,
+                //     'run_id' => $runId,
+                //     'status' => $statusResp->status(),
+                //     'body' => $statusResp->body(),
+                // ]);
                 throw new \RuntimeException('Failed to check run: ' . $statusResp->body());
             }
 
             $statusJson = $statusResp->json();
             $status = (string) data_get($statusJson, 'status', 'queued');
 
-            Log::debug('Assistants: run status tick', [
-                'thread_id' => $threadId,
-                'run_id' => $runId,
-                'status' => $status,
-                'elapsed_s' => $elapsed,
-            ]);
+           // Log::debug('Assistants: run status tick', [
+            //     'thread_id' => $threadId,
+            //     'run_id' => $runId,
+            //     'status' => $status,
+            //     'elapsed_s' => $elapsed,
+            // ]);
 
             if ($status === 'completed')
                 break;
 
             if ($status === 'requires_action') {
                 $toolCalls = data_get($statusJson, 'required_action.submit_tool_outputs.tool_calls', []);
-                Log::warning('Assistants: run requires tool action (not implemented)', [
-                    'thread_id' => $threadId,
-                    'run_id' => $runId,
-                    'tool_calls' => $toolCalls,
-                ]);
+               // Log::warning('Assistants: run requires tool action (not implemented)', [
+                //     'thread_id' => $threadId,
+                //     'run_id' => $runId,
+                //     'tool_calls' => $toolCalls,
+                // ]);
                 throw new \RuntimeException('Run requires tool action but no tool outputs were provided.');
             }
 
             if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
-                Log::error('Assistants: run terminal error', [
-                    'thread_id' => $threadId,
-                    'run_id' => $runId,
-                    'status' => $status,
-                    'last_error' => data_get($statusJson, 'last_error', null),
-                    'full' => $statusJson,
-                ]);
+               // Log::error('Assistants: run terminal error', [
+                //     'thread_id' => $threadId,
+                //     'run_id' => $runId,
+                //     'status' => $status,
+                //     'last_error' => data_get($statusJson, 'last_error', null),
+                //     'full' => $statusJson,
+                // ]);
                 $lastError = data_get($statusJson, 'last_error.message') ?? 'unknown error';
                 throw new \RuntimeException("Run {$status}: {$lastError}");
             }
 
             if ($elapsed >= $maxWaitSeconds) {
-                Log::error('Assistants: run timed out', [
-                    'thread_id' => $threadId,
-                    'run_id' => $runId,
-                    'last_seen' => $status,
-                ]);
+               // Log::error('Assistants: run timed out', [
+                //     'thread_id' => $threadId,
+                //     'run_id' => $runId,
+                //     'last_seen' => $status,
+                // ]);
                 throw new \RuntimeException('Run timed out waiting for completion.');
             }
 
@@ -733,12 +733,12 @@ class WhatsappService
             'order' => 'desc',
         ]);
 
-        Log::debug('Assistants: messages fetch', [
-            'thread_id' => $threadId,
-            'status' => $messagesResp->status(),
-            'ok' => $messagesResp->ok(),
-            'body' => $messagesResp->json(),
-        ]);
+       // Log::debug('Assistants: messages fetch', [
+        //     'thread_id' => $threadId,
+        //     'status' => $messagesResp->status(),
+        //     'ok' => $messagesResp->ok(),
+        //     'body' => $messagesResp->json(),
+        // ]);
 
         if (!$messagesResp->ok()) {
             throw new \RuntimeException('Failed to list messages: ' . $messagesResp->body());
