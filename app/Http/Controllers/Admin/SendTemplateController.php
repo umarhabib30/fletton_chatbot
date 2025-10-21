@@ -52,7 +52,7 @@ class SendTemplateController extends Controller
     {
         $cleanPhone = preg_replace('/[^0-9+]/', '', $request->phone);
         $recipientNumber = 'whatsapp:' . $cleanPhone;
-
+        $credentials = Credential::first();
         $friendlyName = $cleanPhone;
         $message = 'Hello from fletton surveys';
         // $contentSid = 'HX8febaed305fb3d6f705269f53975e86c';
@@ -141,6 +141,48 @@ class SendTemplateController extends Controller
                     'unread_message' => $msg->body,
                 ]
             );
+
+            $payload = [
+                'given_name' => $request->first_name,
+                'family_name' => $request->last_name,
+                'lead_source_id' => 329,
+                'contact_type' => 'Prospective',
+                'duplicate_option' => 'Email',
+                // ✅ Add this line
+                'opt_in_reason' => 'Explicit consent provided during website registration',
+                // Billing address
+                'addresses' => [
+                    [
+                        'line1' => $request->address,
+                        'locality' => '',
+                        'postal_code' => $request->postal_code ?? '',
+                        'country_code' => '',
+                        'field' => 'BILLING'
+                    ]
+                ],
+                // Phone numbers
+                'phone_numbers' => [
+                    [
+                        'number' => str_replace(' ', '', $cleanPhone),
+                        'field' => 'PHONE1'
+                    ]
+                ],
+                // Email addresses
+                'email_addresses' => [
+                    [
+                        'email' => $request->email,
+                        'field' => 'EMAIL1'
+                    ]
+                ],
+            ];
+
+            // ✅ Send to Keap
+            $response = Http::withHeaders([
+                'X-Keap-API-Key' => $credentials->keap_api_key,
+                'Authorization' => 'Bearer '. $credentials->keap_api_key,
+                'Content-Type' => 'application/json',
+            ])->put('https://api.infusionsoft.com/crm/rest/v1/contacts', $payload);
+            $contactData = $response->json();
 
             ChatHistory::create([
                 'conversation_sid' => $existingSid,

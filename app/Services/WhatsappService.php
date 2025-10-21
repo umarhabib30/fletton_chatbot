@@ -329,9 +329,17 @@ class WhatsappService
         }
 
         if ($numMedia > 0) {
+            $payload = $request->all();  // ensure raw access to all Twilio fields
+            $mediaPaths = [];
+
             for ($i = 0; $i < $numMedia; $i++) {
-                $mediaUrl = $request->input("MediaUrl{$i}");
-                $mediaType = $request->input("MediaContentType{$i}");
+                $mediaUrl = $payload["MediaUrl{$i}"] ?? null;
+                $mediaType = $payload["MediaContentType{$i}"] ?? null;
+
+                if (!$mediaUrl || !$mediaType) {
+                    Log::warning("Missing MediaUrl or MediaContentType for index {$i}");
+                    continue;
+                }
 
                 // ✅ Download file from Twilio using stored credentials
                 $response = Http::withBasicAuth(
@@ -348,14 +356,29 @@ class WhatsappService
                     continue;
                 }
 
+                // Determine correct file extension
                 $extension = match ($mediaType) {
                     'image/png' => 'png',
-                    'image/jpeg' => 'jpg',
+                    'image/jpeg', 'image/jpg' => 'jpg',
+                    'image/gif' => 'gif',
+                    'video/mp4' => 'mp4',
                     default => 'bin',
                 };
 
-                $filename = 'whatsapp_' . now()->timestamp . "_{$i}." . $extension;
-                $storagePath = public_path("uploads/{$filename}");
+                // Create unique, timestamp-based filename
+                $filename = sprintf(
+                    'whatsapp_%s_%d.%s',
+                    now()->format('Ymd_His'),
+                    $i,
+                    $extension
+                );
+
+                $uploadDir = public_path('uploads');
+                if (!file_exists($uploadDir)) {
+                    mkdir($uploadDir, 0775, true);
+                }
+
+                $storagePath = "{$uploadDir}/{$filename}";
                 file_put_contents($storagePath, $response->body());
 
                 $publicUrl = asset("uploads/{$filename}");
@@ -365,17 +388,25 @@ class WhatsappService
                     'image' => $publicUrl,
                     'mime_type' => $mediaType,
                 ];
+
+                Log::info('Media saved successfully', [
+                    'file' => $filename,
+                    'mime' => $mediaType,
+                    'url' => $publicUrl,
+                ]);
             }
 
-            // Optionally save to chat history
-            ChatHistory::create([
-                'conversation_sid' => $conversationSid ?? null,
-                'body' => '[Image Received]',
-                'author' => 'user',
-                'attachments' => json_encode($mediaPaths),
-                'has_images' => true,
-                'date_created' => now(),
-            ]);
+            // ✅ Optionally save all media info in chat history
+            if (!empty($mediaPaths)) {
+                ChatHistory::create([
+                    'conversation_sid' => $conversationSid ?? null,
+                    'body' => '[Image Received]',
+                    'author' => 'user',
+                    'attachments' => json_encode($mediaPaths),
+                    'has_images' => true,
+                    'date_created' => now(),
+                ]);
+            }
         }
 
         // Emit user message to your UI

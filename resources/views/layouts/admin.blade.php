@@ -39,6 +39,17 @@
 
 
     <title>{{ $title }}</title>
+    <style>
+        @media(max-width: 767px){
+            .navbar{
+                height: 10% !important;
+            }
+
+            .header-img{
+                width: 60% !important;
+            }
+        }
+    </style>
 
     @yield('style')
 
@@ -57,7 +68,7 @@
             <nav class="navbar navbar-expand-lg bg-white fixed-top" style="background: #1A202C !important">
                 <a class="navbar-brand" href="{{ url('admin/dashboard') }}"><img
                         src="{{ asset('assets/logo/FlettonsChat Logo Transparent.png') }}" alt=""
-                        style="width: 15%"></a>
+                        style="width: 15%" class="header-img"></a>
                 <button class="navbar-toggler" type="button" data-toggle="collapse"
                     data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false"
                     aria-label="Toggle navigation">
@@ -75,8 +86,7 @@
                                 <div class="nav-user-info">
                                     <h5 class="mb-0 text-white nav-user-name">Admin </h5>
                                 </div>
-                                <a class="dropdown-item" href="{{ url('/') }}"><i
-                                        class="fab fa-rocketchat mr-2"></i>Chats</a>
+                                <a class="dropdown-item" href="{{ url('/') }}"><i  class="fab fa-rocketchat mr-2"></i>Chats</a>
                                 <a class="dropdown-item" href="{{ route('admin.logout') }}"><i
                                         class="fas fa-sign-in-alt mr-2"></i>Logout</a>
                             </div>
@@ -154,6 +164,14 @@
                                 <a class="nav-link collapsed @if ($active == 'messages') active @endif"
                                     href="{{ url('admin/send-template') }}"><i class="fab fa-whatsapp"></i>Send
                                     Message</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link collapsed @if ($active == 'messages') active @endif"
+                                    href="{{ url('/') }}"><i class="fab fa-rocketchat"></i>Chats</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link collapsed @if ($active == 'messages') active @endif"
+                                    href="{{ route('admin.logout') }}"><i class="fas fa-sign-in-alt"></i>Logout</a>
                             </li>
 
                         </ul>
