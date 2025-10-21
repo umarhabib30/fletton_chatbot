@@ -366,12 +366,7 @@ class WhatsappService
                 };
 
                 // Create unique, timestamp-based filename
-                $filename = sprintf(
-                    'whatsapp_%s_%d.%s',
-                    now()->format('Ymd_His'),
-                    $i,
-                    $extension
-                );
+                $filename = 'whatsapp_' . uniqid('', true) . "_{$i}." . $extension;
 
                 $uploadDir = public_path('uploads');
                 if (!file_exists($uploadDir)) {
