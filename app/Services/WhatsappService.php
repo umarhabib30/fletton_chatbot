@@ -306,7 +306,7 @@ class WhatsappService
      */
     public function handleIncoming(Request $request)
     {
-        // Log::info('WhatsApp webhook payload:', $request->all());
+        Log::info('WhatsApp webhook payload:', $request->all());
 
         // Normalise WhatsApp number and find Twilio Conversation SID
         $userNumber = str_replace('whatsapp:', '', (string) $request->input('From', ''));
