@@ -33,6 +33,7 @@
     <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 
     <style>
+
         #contactsList {
             -webkit-overflow-scrolling: touch;
             /* smooth scroll for iOS */
@@ -2619,8 +2620,8 @@
             //     });
             //   });
 
-            $(document).off('pointerdown', '#chatSearchBtn'); // remove old
-            $(document).on('pointerdown', '#chatSearchBtn', function(e) {
+            $(document).off('pointerdown', '#chatSearchBtn , #chatSearchBtn2' ); // remove old
+            $(document).on('pointerdown', '#chatSearchBtn , #chatSearchBtn2', function(e) {
                 e.stopPropagation();
                 const isDesktop = window.matchMedia('(min-width: 768px)').matches;
 

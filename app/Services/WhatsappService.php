@@ -306,7 +306,7 @@ class WhatsappService
      */
     public function handleIncoming(Request $request)
     {
-       // Log::info('WhatsApp webhook payload:', $request->all());
+        // Log::info('WhatsApp webhook payload:', $request->all());
 
         // Normalise WhatsApp number and find Twilio Conversation SID
         $userNumber = str_replace('whatsapp:', '', (string) $request->input('From', ''));
@@ -337,7 +337,7 @@ class WhatsappService
                 $mediaType = $payload["MediaContentType{$i}"] ?? null;
 
                 if (!$mediaUrl || !$mediaType) {
-                   // Log::warning("Missing MediaUrl or MediaContentType for index {$i}");
+                    // Log::warning("Missing MediaUrl or MediaContentType for index {$i}");
                     continue;
                 }
 
@@ -348,7 +348,7 @@ class WhatsappService
                 )->get($mediaUrl);
 
                 if (!$response->ok()) {
-                   // Log::error('Failed to download Twilio media', [
+                    // Log::error('Failed to download Twilio media', [
                     //     'url' => $mediaUrl,
                     //     'status' => $response->status(),
                     //     'body' => $response->body(),
@@ -384,7 +384,7 @@ class WhatsappService
                     'mime_type' => $mediaType,
                 ];
 
-               // Log::info('Media saved successfully', [
+                // Log::info('Media saved successfully', [
                 //     'file' => $filename,
                 //     'mime' => $mediaType,
                 //     'url' => $publicUrl,
@@ -406,6 +406,7 @@ class WhatsappService
 
         // Emit user message to your UI
         event(new MessageSent($userText, $conversationSid, 'user'));
+
         if ($userText != '') {
             ChatHistory::create([
                 'conversation_sid' => $conversationSid,
@@ -414,34 +415,36 @@ class WhatsappService
                 'date_created' => Carbon::now()->toDateTimeString(),
             ]);
         }
+
         $chatControll = ChatControll::where('sid', $conversationSid)->first();
         $chatControll->update([
             'unread' => true,
             'unread_count' => $chatControll->unread_count + 1,
             'unread_message' => $userText,
         ]);
-        // if auto reply is off it will not call gpt api
-        if (!$chatControll->auto_reply) {
-            return response()->noContent();
-        }
 
-        // Run the assistant and fetch an HTML reply
+        // ✅ Always add user message to GPT thread (even if auto_reply = false)
         try {
             $format_data_service = new FormatResponseService();
-
             $formated_crm_data = $format_data_service->formatResponse($conversation->email);
-            $replyHtml = $this->runAssistantAndGetReply($userNumber, $userText, $formated_crm_data, $mediaPaths);
-            // dd($replyHtml);
-            $replyText = $this->htmlToWhatsappText($replyHtml);
-            // $replyText = $replyHtml;
-            // Send reply into your chat & WhatsApp
-            $this->sendCustomMessage($conversationSid, $replyText);
-            event(new MessageSent($replyText, $conversationSid, 'admin'));
 
-            $chatControll->update([
-                'unread_message' => $replyText,
-            ]);
+            // Only send the message to the thread, don’t create a run if auto_reply is off
+            $this->addMessageToThreadOnly($conversation->contact, $userText, $formated_crm_data, $mediaPaths);
+
+            // ✅ Only generate GPT reply if auto_reply = true
+            if ($chatControll->auto_reply) {
+                $replyHtml = $this->runAssistantAndGetReply($conversation->contact, $userText, $formated_crm_data, $mediaPaths);
+                $replyText = $this->htmlToWhatsappText($replyHtml);
+
+                $this->sendCustomMessage($conversationSid, $replyText);
+                event(new MessageSent($replyText, $conversationSid, 'admin'));
+
+                $chatControll->update([
+                    'unread_message' => $replyText,
+                ]);
+            }
         } catch (\Throwable $e) {
+            // handle assistant error
             $chat = ChatControll::where('sid', $conversationSid)->first();
             $data = [
                 'first_name' => $chat->first_name,
@@ -449,12 +452,66 @@ class WhatsappService
                 'contact' => $chat->contact,
             ];
             Mail::to('Info@flettons.com')->send(new AssistantFailureMail($data));
-
-           // Log::error('Assistant error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
             $replyText = 'Please wait';
         }
 
         return response()->noContent();
+    }
+
+    protected function addMessageToThreadOnly(string $userNumber, string $userText, array $crmData, $mediaPaths)
+    {
+        $threadId = $this->getOrCreateThreadId($userNumber);
+        $file_ids = [];
+
+        if (!empty($mediaPaths)) {
+            foreach ($mediaPaths as $path) {
+                $localImagePath = $path['local_path'];
+                if (file_exists($localImagePath)) {
+                    $fileUpload = Http::withHeaders([
+                        'Authorization' => "Bearer {$this->openAiKey}",
+                        'OpenAI-Beta' => 'assistants=v2',
+                    ])
+                        ->attach('file', file_get_contents($localImagePath), basename($localImagePath))
+                        ->post('https://api.openai.com/v1/files', ['purpose' => 'vision']);
+                    if ($fileId = data_get($fileUpload->json(), 'id')) {
+                        $file_ids[] = $fileId;
+                    }
+                }
+            }
+        }
+
+        $contextText = "```json\n" . json_encode($crmData, JSON_PRETTY_PRINT) . "\n```";
+        $contentBlocks = [];
+
+        if (!empty($userText)) {
+            $contentBlocks[] = [
+                'type' => 'text',
+                'text' => "### CUSTOMER_CONTEXT\n{$contextText}\n\n### USER_MESSAGE\n{$userText}"
+            ];
+        }
+
+        foreach ($file_ids as $fid) {
+            $contentBlocks[] = [
+                'type' => 'image_file',
+                'image_file' => ['file_id' => $fid]
+            ];
+        }
+
+        if (empty($contentBlocks)) {
+            $contentBlocks[] = [
+                'type' => 'text',
+                'text' => 'No valid message provided'
+            ];
+        }
+
+        Http::withHeaders([
+            'Authorization' => "Bearer {$this->openAiKey}",
+            'Content-Type' => 'application/json',
+            'OpenAI-Beta' => 'assistants=v2',
+        ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
+            'role' => 'user',
+            'content' => $contentBlocks,
+        ]);
     }
 
     /**
@@ -508,7 +565,7 @@ class WhatsappService
             'OpenAI-Beta' => 'assistants=v2',
         ])->post('https://api.openai.com/v1/threads', $payload);
 
-       // Log::debug('Assistants: create thread', [
+        // Log::debug('Assistants: create thread', [
         //     'contact' => $userNumber,
         //     'status' => $resp->status(),
         //     'ok' => $resp->ok(),
@@ -610,7 +667,7 @@ class WhatsappService
         // Add the incoming user message; if the thread was purged, recreate using ONLY getOrCreateThreadId
         $addMsg = $addMessageToThread($threadId);
         if ($addMsg->status() === 404) {
-           // Log::warning('Assistants: thread 404, recreating', [
+            // Log::warning('Assistants: thread 404, recreating', [
             //     'thread_id' => $threadId,
             //     'user_number' => $userNumber,
             // ]);
@@ -637,7 +694,7 @@ class WhatsappService
             'OpenAI-Beta' => 'assistants=v2',
         ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", $runCreatePayload);
 
-       // Log::debug('Assistants: run created', [
+        // Log::debug('Assistants: run created', [
         //     'thread_id' => $threadId,
         //     'status' => $run->status(),
         //     'ok' => $run->ok(),
@@ -666,7 +723,7 @@ class WhatsappService
             ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
 
             if (!$statusResp->ok()) {
-               // Log::error('Assistants: failed to check run', [
+                // Log::error('Assistants: failed to check run', [
                 //     'thread_id' => $threadId,
                 //     'run_id' => $runId,
                 //     'status' => $statusResp->status(),
@@ -678,7 +735,7 @@ class WhatsappService
             $statusJson = $statusResp->json();
             $status = (string) data_get($statusJson, 'status', 'queued');
 
-           // Log::debug('Assistants: run status tick', [
+            // Log::debug('Assistants: run status tick', [
             //     'thread_id' => $threadId,
             //     'run_id' => $runId,
             //     'status' => $status,
@@ -690,7 +747,7 @@ class WhatsappService
 
             if ($status === 'requires_action') {
                 $toolCalls = data_get($statusJson, 'required_action.submit_tool_outputs.tool_calls', []);
-               // Log::warning('Assistants: run requires tool action (not implemented)', [
+                // Log::warning('Assistants: run requires tool action (not implemented)', [
                 //     'thread_id' => $threadId,
                 //     'run_id' => $runId,
                 //     'tool_calls' => $toolCalls,
@@ -699,7 +756,7 @@ class WhatsappService
             }
 
             if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
-               // Log::error('Assistants: run terminal error', [
+                // Log::error('Assistants: run terminal error', [
                 //     'thread_id' => $threadId,
                 //     'run_id' => $runId,
                 //     'status' => $status,
@@ -711,7 +768,7 @@ class WhatsappService
             }
 
             if ($elapsed >= $maxWaitSeconds) {
-               // Log::error('Assistants: run timed out', [
+                // Log::error('Assistants: run timed out', [
                 //     'thread_id' => $threadId,
                 //     'run_id' => $runId,
                 //     'last_seen' => $status,
@@ -733,7 +790,7 @@ class WhatsappService
             'order' => 'desc',
         ]);
 
-       // Log::debug('Assistants: messages fetch', [
+        // Log::debug('Assistants: messages fetch', [
         //     'thread_id' => $threadId,
         //     'status' => $messagesResp->status(),
         //     'ok' => $messagesResp->ok(),
