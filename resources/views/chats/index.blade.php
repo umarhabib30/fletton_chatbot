@@ -33,7 +33,6 @@
     <script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 
     <style>
-
         #contactsList {
             -webkit-overflow-scrolling: touch;
             /* smooth scroll for iOS */
@@ -654,6 +653,18 @@
                 max-width: 92%;
             }
         }
+
+
+        #scrollToBottomBtn {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        #scrollToBottomBtn.show {
+            opacity: 1;
+            transform: translateY(0);
+            transition: all 0.3s ease-in-out;
+        }
     </style>
 </head>
 
@@ -1084,9 +1095,134 @@
     </div>
 
 
+    <!-- Scroll to Bottom Button -->
+    <button id="scrollToBottomBtn"
+        class="hidden fixed bottom-24 right-6 bg-green-500 hover:bg-green-600 text-white rounded-full shadow-lg z-50 transition duration-200"
+        title="Scroll to latest message" style="padding: 10px 15px">
+        <i class="fa fa-arrow-down"></i>
+    </button>
+
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script>
+        $(document).ready(function() {
+            const $messagesArea = $('#messagesArea');
+            const $scrollBtn = $('#scrollToBottomBtn');
+
+            // Show button when scrolled up
+            $messagesArea.on('scroll', function() {
+                const scrollTop = $messagesArea.scrollTop();
+                const scrollHeight = $messagesArea[0].scrollHeight;
+                const clientHeight = $messagesArea[0].clientHeight;
+
+                // Show button only when not near bottom
+                if (scrollTop + clientHeight < scrollHeight - 200) {
+                    $scrollBtn.addClass('show').removeClass('hidden');
+                } else {
+                    $scrollBtn.removeClass('show').addClass('hidden');
+                }
+            });
+
+            // Scroll to bottom smoothly
+            $scrollBtn.on('click', function() {
+                $messagesArea.animate({
+                    scrollTop: $messagesArea[0].scrollHeight
+                }, 400);
+            });
+        });
+
+        $('#scrollToBottomBtn').removeClass('show').addClass('hidden');
+
+
+        let selectedMessageBubble = null;
+        let selectedMessageText = '';
+
+        $(document).on('pointerdown', '.message-menu-btn', function(e) {
+            e.stopPropagation();
+
+            const menu = $('#messageActionMenu');
+            const isSameTarget = selectedMessageBubble && selectedMessageBubble.is($(this).closest(
+                '.relative'));
+            const isVisible = !menu.hasClass('hidden');
+
+            // If clicking same chevron while menu is open → close it
+            if (isVisible && isSameTarget) {
+                menu.addClass('hidden');
+                return;
+            }
+
+            // Otherwise, proceed with opening logic
+            selectedMessageBubble = $(this).closest('.relative');
+            selectedMessageText = selectedMessageBubble.find('.wa-text-primary').text();
+
+            const btnOffset = $(this).offset();
+            const menuWidth = menu.outerWidth();
+            const menuHeight = menu.outerHeight();
+            const viewportWidth = $(window).width();
+            const viewportHeight = $(window).height();
+
+            if (viewportWidth < 768) {
+                // 📱 Mobile - bottom centered
+                menu.css({
+                    left: '50%',
+                    top: viewportHeight - menuHeight - 20 + 'px',
+                    transform: 'translateX(-50%)'
+                }).removeClass('hidden');
+            } else {
+                // 💻 Desktop - smart positioning
+                let left = btnOffset.left + 20;
+                let top = btnOffset.top + 20;
+
+                if (left + menuWidth > viewportWidth) left = btnOffset.left - menuWidth - 10;
+                if (top + menuHeight > viewportHeight) top = btnOffset.top - menuHeight - 10;
+
+                menu.css({
+                    top: top + 'px',
+                    left: left + 'px',
+                    transform: 'none'
+                }).removeClass('hidden');
+            }
+        });
+
+        $(document).on('click', '.menu-item', function() {
+            const action = $(this).data('action');
+            $('#messageActionMenu').addClass('hidden');
+
+            if (action === 'copy') {
+                navigator.clipboard.writeText(selectedMessageText);
+                toastr.success("Message Copied!");
+            } else if (action === 'star') {
+                const messageId = selectedMessageBubble.find('.message-menu-btn').data('messageid');
+                $.ajax({
+                    url: "{{ url('message/star') }}/" + messageId,
+                    type: "GET",
+                    success: function(response) {
+
+                        const timestampLine = selectedMessageBubble.find('p.text-xs');
+                        const existingStar = timestampLine.find('.fa-star');
+
+                        if (existingStar.length) {
+                            // Star exists → remove it
+                            existingStar.remove();
+                        } else {
+                            // Star doesn't exist → add it
+                            timestampLine.prepend(
+                                '<i class="fa fa-star text-sm mr-1"></i> ');
+                        }
+
+                        refreshStarredCountFromDOM();
+                    },
+                    error: function(error) {
+
+                    }
+                });
+            } else if (action === 'delete') {
+                selectedMessageBubble.closest('.flex').remove();
+            }
+            // you can expand reply/pin/react...
+        });
+
+
         // contact details tab
         $(document).on('click', '.open-infobox', function() {
             openContactInfo();
@@ -1924,10 +2060,13 @@
 
                 // Hide results when clicking outside
                 $(document).on('click', function(e) {
-                    if (!$(e.target).closest('#chatSearchAreaDesktop, #chatSearchBarMobile').length) {
-                        $('#chatSearchResultsDesktop, #chatSearchResultsMobile').addClass('hidden');
+                    // Only close if the click is *outside* both the menu and button
+                    if (!$(e.target).closest('#messageActionMenu, .message-menu-btn').length) {
+                        $('#messageActionMenu').addClass('hidden');
+                        $('.chat-menu-dropdown').hide();
                     }
                 });
+
 
                 // On resize, close UIs to avoid layout glitches
                 // $(window).on('resize', closeAllSearchUIs);
@@ -1997,95 +2136,10 @@
                 });
             })();
 
-            let selectedMessageText = "";
-            let selectedMessageBubble = null;
-
-            $(document).on('click', '.message-menu-btn', function(e) {
-                e.stopPropagation();
-
-                const menu = $('#messageActionMenu');
-                const isSameTarget = selectedMessageBubble && selectedMessageBubble.is($(this).closest(
-                    '.relative'));
-                const isVisible = !menu.hasClass('hidden');
-
-                // If clicking same chevron while menu is open → close it
-                if (isVisible && isSameTarget) {
-                    menu.addClass('hidden');
-                    return;
-                }
-
-                // Otherwise, proceed with opening logic
-                selectedMessageBubble = $(this).closest('.relative');
-                selectedMessageText = selectedMessageBubble.find('.wa-text-primary').text();
-
-                const btnOffset = $(this).offset();
-                const menuWidth = menu.outerWidth();
-                const menuHeight = menu.outerHeight();
-                const viewportWidth = $(window).width();
-                const viewportHeight = $(window).height();
-
-                if (viewportWidth < 768) {
-                    // 📱 Mobile - bottom centered
-                    menu.css({
-                        left: '50%',
-                        top: viewportHeight - menuHeight - 20 + 'px',
-                        transform: 'translateX(-50%)'
-                    }).removeClass('hidden');
-                } else {
-                    // 💻 Desktop - smart positioning
-                    let left = btnOffset.left + 20;
-                    let top = btnOffset.top + 20;
-
-                    if (left + menuWidth > viewportWidth) left = btnOffset.left - menuWidth - 10;
-                    if (top + menuHeight > viewportHeight) top = btnOffset.top - menuHeight - 10;
-
-                    menu.css({
-                        top: top + 'px',
-                        left: left + 'px',
-                        transform: 'none'
-                    }).removeClass('hidden');
-                }
-            });
 
 
 
-            $(document).on('click', '.menu-item', function() {
-                const action = $(this).data('action');
-                $('#messageActionMenu').addClass('hidden');
 
-                if (action === 'copy') {
-                    navigator.clipboard.writeText(selectedMessageText);
-                    toastr.success("Message Copied!");
-                } else if (action === 'star') {
-                    const messageId = selectedMessageBubble.find('.message-menu-btn').data('messageid');
-                    $.ajax({
-                        url: "{{ url('message/star') }}/" + messageId,
-                        type: "GET",
-                        success: function(response) {
-
-                            const timestampLine = selectedMessageBubble.find('p.text-xs');
-                            const existingStar = timestampLine.find('.fa-star');
-
-                            if (existingStar.length) {
-                                // Star exists → remove it
-                                existingStar.remove();
-                            } else {
-                                // Star doesn't exist → add it
-                                timestampLine.prepend(
-                                    '<i class="fa fa-star text-sm mr-1"></i> ');
-                            }
-
-                            refreshStarredCountFromDOM();
-                        },
-                        error: function(error) {
-
-                        }
-                    });
-                } else if (action === 'delete') {
-                    selectedMessageBubble.closest('.flex').remove();
-                }
-                // you can expand reply/pin/react...
-            });
 
             $(document).on('click', function() {
                 $('#messageActionMenu').addClass('hidden');
@@ -2620,7 +2674,7 @@
             //     });
             //   });
 
-            $(document).off('pointerdown', '#chatSearchBtn , #chatSearchBtn2' ); // remove old
+            $(document).off('pointerdown', '#chatSearchBtn , #chatSearchBtn2'); // remove old
             $(document).on('pointerdown', '#chatSearchBtn , #chatSearchBtn2', function(e) {
                 e.stopPropagation();
                 const isDesktop = window.matchMedia('(min-width: 768px)').matches;
