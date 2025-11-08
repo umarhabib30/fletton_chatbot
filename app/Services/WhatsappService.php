@@ -190,6 +190,17 @@ class WhatsappService
                 'date_created' => Carbon::now()->toDateTimeString(),
             ]);
 
+            // ✅ NEW: also push this manual/admin message into the Assistant thread
+            $chat = ChatControll::where('sid', $conversationSid)->first();
+            if ($chat) {
+                // Optional: mirror your existing CRM context usage
+                $format_data_service = new FormatResponseService();
+                $crmData = $format_data_service->formatResponse($chat->email);
+
+                // contact is your WhatsApp phone number used as the user key in threads
+                $this->addAgentMessageToThreadOnly($chat->contact, $message, $crmData);
+            }
+
             return response()->json([
                 'message' => 'Sent via Conversation',
                 'conversationSid' => $conversationSid,
@@ -456,6 +467,35 @@ class WhatsappService
         }
 
         return response()->noContent();
+    }
+
+    protected function addAgentMessageToThreadOnly(string $userNumber, string $agentText, array $crmData = []): void
+    {
+        // Reuse the existing thread (create if missing)
+        $threadId = $this->getOrCreateThreadId($userNumber);
+
+        // Optional: give the model the same CRM context you use for user messages
+        $contextText = '';
+        if (!empty($crmData)) {
+            $contextText = "```json\n" . json_encode($crmData, JSON_PRETTY_PRINT) . "\n```";
+            $agentText = "### CUSTOMER_CONTEXT\n{$contextText}\n\n### AGENT_MESSAGE\n{$agentText}";
+        } else {
+            $agentText = "### AGENT_MESSAGE\n{$agentText}";
+        }
+
+        // Add the message to the thread WITHOUT creating a run
+        Http::withHeaders([
+            'Authorization' => "Bearer {$this->openAiKey}",
+            'Content-Type' => 'application/json',
+            'OpenAI-Beta' => 'assistants=v2',
+        ])->post("https://api.openai.com/v1/threads/{$threadId}/messages", [
+            // Use role=user to reliably append human-authored messages.
+            // (Creating 'assistant' messages is allowed by API, but 'user' is safest for provenance.)
+            'role' => 'user',
+            'content' => [
+                ['type' => 'text', 'text' => $agentText],
+            ],
+        ]);
     }
 
     protected function addMessageToThreadOnly(string $userNumber, string $userText, array $crmData, $mediaPaths)
