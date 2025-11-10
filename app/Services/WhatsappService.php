@@ -681,7 +681,7 @@ class WhatsappService
             if (empty($userText) && !empty($file_ids)) {
                 array_unshift($contentBlocks, [
                     'type' => 'text',
-                    'text' => 'User sent an image files please read the thread and relate these files and generate response accordingly'
+                    'text' => 'User sent image files; please relate these files to the conversation and respond accordingly.'
                 ]);
             }
 
@@ -689,7 +689,7 @@ class WhatsappService
             if (empty($contentBlocks)) {
                 $contentBlocks[] = [
                     'type' => 'text',
-                    'text' => 'No valid message provided'
+                    'text' => 'No valid message provided.'
                 ];
             }
 
@@ -707,12 +707,6 @@ class WhatsappService
         // Add the incoming user message; if the thread was purged, recreate using ONLY getOrCreateThreadId
         $addMsg = $addMessageToThread($threadId);
         if ($addMsg->status() === 404) {
-            // Log::warning('Assistants: thread 404, recreating', [
-            //     'thread_id' => $threadId,
-            //     'user_number' => $userNumber,
-            // ]);
-
-            // Clear the stored thread id so getOrCreateThreadId will create a fresh one
             ChatControll::where('contact', $userNumber)
                 ->update(['assistant_thread_id' => null]);
 
@@ -723,9 +717,14 @@ class WhatsappService
             throw new \RuntimeException('Failed to add message: ' . $addMsg->body());
         }
 
-        // Create a run (keep your dynamic instructions if you have that helper)
+        // ✅ Add current server date and time for assistant personalization
+        $currentDateTime = now();  // uses server timezone (configured in php.ini or Laravel config)
+        $isoDateTime = $currentDateTime->toIso8601String();
+        $humanDateTime = $currentDateTime->format('l, d F Y h:i A');
+
         $runCreatePayload = [
             'assistant_id' => $this->assistantId,
+            'instructions' => "The current server date and time is {$humanDateTime} (ISO: {$isoDateTime}). Use this information to make time-aware, personalized responses, such as comparing against survey or CRM timestamps.",
         ];
 
         $run = Http::withHeaders([
@@ -733,13 +732,6 @@ class WhatsappService
             'Content-Type' => 'application/json',
             'OpenAI-Beta' => 'assistants=v2',
         ])->post("https://api.openai.com/v1/threads/{$threadId}/runs", $runCreatePayload);
-
-        // Log::debug('Assistants: run created', [
-        //     'thread_id' => $threadId,
-        //     'status' => $run->status(),
-        //     'ok' => $run->ok(),
-        //     'body' => $run->json(),
-        // ]);
 
         if (!$run->ok()) {
             throw new \RuntimeException('Failed to create run: ' . $run->body());
@@ -763,56 +755,25 @@ class WhatsappService
             ])->get("https://api.openai.com/v1/threads/{$threadId}/runs/{$runId}");
 
             if (!$statusResp->ok()) {
-                // Log::error('Assistants: failed to check run', [
-                //     'thread_id' => $threadId,
-                //     'run_id' => $runId,
-                //     'status' => $statusResp->status(),
-                //     'body' => $statusResp->body(),
-                // ]);
                 throw new \RuntimeException('Failed to check run: ' . $statusResp->body());
             }
 
             $statusJson = $statusResp->json();
             $status = (string) data_get($statusJson, 'status', 'queued');
 
-            // Log::debug('Assistants: run status tick', [
-            //     'thread_id' => $threadId,
-            //     'run_id' => $runId,
-            //     'status' => $status,
-            //     'elapsed_s' => $elapsed,
-            // ]);
-
             if ($status === 'completed')
                 break;
 
             if ($status === 'requires_action') {
-                $toolCalls = data_get($statusJson, 'required_action.submit_tool_outputs.tool_calls', []);
-                // Log::warning('Assistants: run requires tool action (not implemented)', [
-                //     'thread_id' => $threadId,
-                //     'run_id' => $runId,
-                //     'tool_calls' => $toolCalls,
-                // ]);
                 throw new \RuntimeException('Run requires tool action but no tool outputs were provided.');
             }
 
             if (in_array($status, ['failed', 'cancelled', 'expired'], true)) {
-                // Log::error('Assistants: run terminal error', [
-                //     'thread_id' => $threadId,
-                //     'run_id' => $runId,
-                //     'status' => $status,
-                //     'last_error' => data_get($statusJson, 'last_error', null),
-                //     'full' => $statusJson,
-                // ]);
                 $lastError = data_get($statusJson, 'last_error.message') ?? 'unknown error';
                 throw new \RuntimeException("Run {$status}: {$lastError}");
             }
 
             if ($elapsed >= $maxWaitSeconds) {
-                // Log::error('Assistants: run timed out', [
-                //     'thread_id' => $threadId,
-                //     'run_id' => $runId,
-                //     'last_seen' => $status,
-                // ]);
                 throw new \RuntimeException('Run timed out waiting for completion.');
             }
 
@@ -829,13 +790,6 @@ class WhatsappService
             'limit' => 5,
             'order' => 'desc',
         ]);
-
-        // Log::debug('Assistants: messages fetch', [
-        //     'thread_id' => $threadId,
-        //     'status' => $messagesResp->status(),
-        //     'ok' => $messagesResp->ok(),
-        //     'body' => $messagesResp->json(),
-        // ]);
 
         if (!$messagesResp->ok()) {
             throw new \RuntimeException('Failed to list messages: ' . $messagesResp->body());

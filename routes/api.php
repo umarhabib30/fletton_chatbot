@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\SendTemplateController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\OpenAIAssistantController;
 use App\Http\Controllers\WhatsAppController;
@@ -30,3 +31,5 @@ Route::get('conversation/delete/{id}', [ChatController::class, 'deleteConversati
 Route::post('/openai/assistants', [OpenAIAssistantController::class, 'createAssistant']);
 Route::post('/openai/vector-stores', [OpenAIAssistantController::class, 'createVectorStore']);
 Route::post('/openai/vector-stores/{vectorStoreId}/files', [OpenAIAssistantController::class, 'addFilesToVectorStore']);
+
+Route::post('send-paid-template-message', [SendTemplateController::class, 'sendTemplate']);
