@@ -45,8 +45,14 @@ class WhatsappService
     public function sendWhatsAppMessage($request)
     {
         $template = MessageTemplate::where('used_for', 'old_user')->first();
-        $recipientNumber = 'whatsapp:' . $request->phone;
-        $friendlyName = $request->phone;
+        $raw = $request->phone;  // e.g. "(DO) +1 8098484715"
+
+        // Remove everything except digits and plus sign
+        $cleaned = preg_replace('/[^0-9+]/', '', $raw);
+
+        $recipientNumber = 'whatsapp:' . $cleaned;
+        $friendlyName = $cleaned;
+
         $message = 'Hello from fletton surveys';
         // $contentSid = 'HX8febaed305fb3d6f705269f53975e86c';
         $contentSid = $template->template_id;
