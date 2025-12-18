@@ -38,8 +38,10 @@ class MessageTemplateController extends Controller
             }
         }
 
-        if (MessageTemplate::where('used_for', $request->used_for)->exists()) {
-            return redirect()->back()->with('error', "Template for {$request->used_for} already exists");
+        if($request->used_for != 'other') {
+            if (MessageTemplate::where('used_for', $request->used_for)->exists()) {
+                return redirect()->back()->with('error', "Template for {$request->used_for} already exists");
+            }
         }
 
         MessageTemplate::create([
