@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Events\MessageSent;
 use App\Mail\AssistantFailureMail;
+use App\Mail\NewMessageMail;
 use App\Models\ChatControll;
 use App\Models\ChatHistory;
 use App\Models\Credential;
@@ -148,6 +149,13 @@ class WhatsappService
                 'author' => 'system',
                 'date_created' => Carbon::now()->toDateTimeString(),
             ]);
+
+            // Send email notification after storing ChatHistory
+            $mailData = [
+                'body' => $msg->body,
+                'friendlyName' => $friendlyName,
+            ];
+            Mail::to('mumarhabibrb102@gmail.com')->send(new NewMessageMail($mailData));
 
             event(new MessageSent($msg->body, $existingSid, 'system'));
             // 3) Create/seed the OpenAI thread using ONLY getOrCreateThreadId
