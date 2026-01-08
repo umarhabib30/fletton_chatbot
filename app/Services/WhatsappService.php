@@ -155,7 +155,7 @@ class WhatsappService
                 'body' => $msg->body,
                 'friendlyName' => $friendlyName,
             ];
-            Mail::to('mumarhabibrb102@gmail.com')->send(new NewMessageMail($mailData));
+
 
             event(new MessageSent($msg->body, $existingSid, 'system'));
             // 3) Create/seed the OpenAI thread using ONLY getOrCreateThreadId
@@ -166,7 +166,7 @@ class WhatsappService
                 'address' => $contact->address,
                 'postal_code' => $contact->postal_code,
             ]);
-
+            Mail::to('mumarhabibrb102@gmail.com')->send(new NewMessageMail($mailData));
             return response()->json([
                 'message' => 'WhatsApp message sent successfully',
                 'conversation_sid' => $existingSid,
